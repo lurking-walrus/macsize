@@ -283,8 +283,8 @@ if [[ $DO_NOTARY -eq 1 ]]; then
     P8_PATH="${P8_PATH//\\ / }"
     [[ -f "$P8_PATH" ]] || die "file not found: $P8_PATH"
     P8_FILE="$(basename "$P8_PATH")"
-    NOTARY_API_KEY_ID="$(sed -n 's/^AuthKey_\([A-Z0-9]\{1,\}\)\.p8$/\1/p' <<<"$P8_FILE")"
-    [[ -n "$NOTARY_API_KEY_ID" ]] || die "expected a file named AuthKey_<KEYID>.p8, got $P8_FILE"
+    NOTARY_API_KEY_ID="$(sed -n 's/^.*AuthKey_\([A-Z0-9]\{1,\}\)\.p8$/\1/p' <<<"$P8_FILE")"
+    [[ -n "$NOTARY_API_KEY_ID" ]] || die "expected a file name ending in AuthKey_<KEYID>.p8 (e.g. MyApp_AuthKey_ABC123.p8), got $P8_FILE"
     grep -q 'BEGIN PRIVATE KEY' "$P8_PATH" || die "$P8_FILE doesn't look like a .p8 private key"
     info "Key ID: $NOTARY_API_KEY_ID"
 
