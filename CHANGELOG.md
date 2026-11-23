@@ -4,6 +4,12 @@ All notable changes to MacSize are documented here. Versions follow
 [Semantic Versioning](https://semver.org/), and each version is a
 [GitHub Release](https://github.com/lurking-walrus/treesize-mac/releases).
 
+## 0.1.2
+
+- **Full Disk Access helper** on the welcome screen: shows whether access is
+  granted, and if not, walks you through it with a MacSize icon you can drag
+  straight into System Settings and a one-click relaunch.
+
 ## 0.1.1
 
 - Add this changelog.
