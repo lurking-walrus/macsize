@@ -324,3 +324,30 @@ final class Fixture {
         #expect(FullDiskAccess.check(probePaths: []) == .unknown)
     }
 }
+
+@Suite struct CloudOnlyAggregationTests {
+    @Test func aggregatesCloudOnlyFilesAndRemoval() throws {
+        let fx = try Fixture()
+        try fx.file("drive/local.bin", bytes: 1000)
+        try fx.file("drive/streamed.bin", bytes: 5000)
+        try fx.file("drive/sub/streamed2.bin", bytes: 3000)
+        let root = try DiskScanner().scanSynchronously(path: fx.root.path)
+        let drive = try #require(root.children.first { $0.name == "drive" })
+        let streamed = try #require(drive.children.first { $0.name == "streamed.bin" })
+        let sub = try #require(drive.children.first { $0.name == "sub" })
+        let streamed2 = try #require(sub.children.first)
+        // Simulate what the scanner does for dataless placeholders, then re-aggregate.
+        streamed.markCloudOnly()
+        streamed2.markCloudOnly()
+        root.finalize()
+
+        #expect(root.cloudOnlySize == 8000)
+        #expect(root.cloudOnlyCount == 2)
+        #expect(root.localLogicalSize == 1000)
+        #expect(sub.cloudOnlySize == 3000)
+
+        sub.removeFromParent()
+        #expect(root.cloudOnlySize == 5000)
+        #expect(root.cloudOnlyCount == 1)
+    }
+}

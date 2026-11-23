@@ -1,8 +1,10 @@
 import AppKit
 import SwiftUI
+import MacSizeCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        CloudStorage.disableAutomaticDownloads()  // MacSize must never download cloud files
         // Needed when launched as a bare executable (e.g. `swift run`) rather than an .app bundle.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
@@ -35,7 +37,10 @@ struct MacSizeApp: App {
                     .keyboardShortcut("o")
                 Button("Rescan") { model.rescan() }
                     .keyboardShortcut("r")
-                    .disabled(model.rootURL == nil || model.isScanning)
+                    .disabled(!model.canRescan)
+                Button("Full Rescan") { model.fullRescan() }
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                    .disabled(!model.canRescan)
                 Button("Cancel Scan") { model.cancelScan() }
                     .keyboardShortcut(".")
                     .disabled(!model.isScanning)
@@ -51,7 +56,13 @@ struct MacSizeApp: App {
         }
 
         Settings {
-            UpdateSettingsView(updater: updater)
+            TabView {
+                GeneralSettingsView()
+                    .environment(model)
+                    .tabItem { Label("General", systemImage: "gearshape") }
+                UpdateSettingsView(updater: updater)
+                    .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
+            }
         }
     }
 }

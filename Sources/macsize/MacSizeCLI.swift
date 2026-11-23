@@ -6,6 +6,8 @@ import MacSizeCore
 @main
 struct MacSizeCLI {
     static func main() {
+        // Never let a scan download cloud (File Provider) placeholders. See CloudStorage.
+        CloudStorage.disableAutomaticDownloads()
         do {
             let args = try Arguments.parse(Array(CommandLine.arguments.dropFirst()))
             // Background update check; finish() waits briefly and prints a one-line notice on stderr.
@@ -28,7 +30,7 @@ struct MacSizeCLI {
         case .version:
             print("\(MacSizeInfo.commandName) \(MacSizeInfo.version)")
         case .scan:
-            let root = try scan(args)
+            let root = try scan(args).root
             if args.json {
                 let report = NodeReport(node: root, maxDepth: args.depth, limit: args.top, minimumSize: args.minimumSize, metric: args.metric)
                 FileHandle.standardOutput.write(try report.jsonData())
@@ -38,7 +40,7 @@ struct MacSizeCLI {
                 printSummary(root, args: args)
             }
         case .largest:
-            let root = try scan(args)
+            let root = try scan(args).root
             let files = root.largestFiles(count: args.count, metric: args.metric)
                 .filter { $0.size(args.metric) >= args.minimumSize }
             if args.json {
@@ -51,7 +53,7 @@ struct MacSizeCLI {
                 }
             }
         case .types:
-            let root = try scan(args)
+            let root = try scan(args).root
             let stats = Array(root.fileTypeSummary(metric: args.metric).prefix(args.count))
             if args.json {
                 FileHandle.standardOutput.write(try encoder().encode(stats))
@@ -72,20 +74,84 @@ struct MacSizeCLI {
             try Benchmark(args: args).run()
         case .update:
             try UpdateCommand.run(checkOnly: args.checkOnly)
+        case .cache:
+            try CacheCommand(args: args).run()
         }
     }
 
-    static func scan(_ args: Arguments) throws -> FileNode {
-        let scanner = DiskScanner(options: args.scanOptions)
-        let reporter = (args.quiet || isatty(STDERR_FILENO) == 0) ? nil : ProgressReporter(progress: scanner.progress)
-        reporter?.start()
+    /// Scans `args.path`, reusing and updating the scan cache unless `--no-cache`.
+    static func scan(_ args: Arguments) throws -> (root: FileNode, outcome: CachedScan.Outcome) {
+        let showProgress = !args.quiet && isatty(STDERR_FILENO) != 0
+        var reporter: ProgressReporter?
         defer { reporter?.stop() }
-        return try scanner.scanSynchronously(path: args.path)
+
+        let location = CacheLocation(args: args)
+        let (root, outcome) = try CachedScan.run(
+            path: args.path,
+            options: args.scanOptions,
+            cache: ScanCache(directory: location.directory),
+            useCache: args.useCache,
+            forceFull: args.forceFull,
+            metric: args.metric,
+            cacheDirectoryIsExplicit: location.isExplicitFlag,
+            onPhase: { phase in
+                guard showProgress else { return }
+                reporter?.stop()
+                switch phase {
+                case let .refreshing(cachedAt, progress):
+                    reporter = ProgressReporter(progress: progress, label: "Updating from cache (scanned \(RelativeTime.short(since: cachedAt)))…")
+                case let .scanning(progress):
+                    reporter = ProgressReporter(progress: progress, label: "Scanning…")
+                }
+                reporter?.start()
+            }
+        )
+        reporter?.stop()
+        reporter = nil
+
+        if let error = outcome.saveError {
+            printError("warning: couldn't save the scan cache in \(location.directory.path): \(error)")
+        }
+        if args.verbose {
+            printNote(cacheReport(outcome, location: location))
+        }
+        return (root, outcome)
+    }
+
+    /// One line describing how the cache was used, e.g. "refreshed from cache: 3 folders rescanned in 0.04 s".
+    static func cacheReport(_ outcome: CachedScan.Outcome, location: CacheLocation) -> String {
+        var text: String
+        switch outcome.source {
+        case .uncached:
+            text = String(format: "scanned without cache in %.2f s", outcome.duration)
+        case .fullScan:
+            text = String(format: "full scan in %.2f s (no usable cached scan)", outcome.duration)
+        case .refreshed:
+            if outcome.didFullRescan {
+                text = String(format: "cached scan couldn't be updated incrementally; full rescan in %.2f s", outcome.duration)
+            } else {
+                let folders = SizeFormatter.grouped(outcome.directoriesRescanned) + (outcome.directoriesRescanned == 1 ? " folder" : " folders")
+                text = String(format: "refreshed from cache: %@ rescanned in %.2f s", folders, outcome.duration)
+            }
+        }
+        if outcome.saved {
+            text += "; saved to \(location.directory.path)"
+        } else if outcome.saveSkipped == .runningAsRoot {
+            text += "; not saved (running as root; pass --cache-dir to save anyway)"
+        }
+        return text
     }
 
     static func printSummary(_ root: FileNode, args: Arguments) {
         var line = "\n\(format(root.size(args.metric), args)) in \(SizeFormatter.grouped(root.fileCount)) files, "
             + "\(SizeFormatter.grouped(root.directoryCount)) folders (\(args.metric.displayName.lowercased()))"
+        if root.cloudOnlyCount > 0 {
+            line += "\n☁︎ \(SizeFormatter.grouped(root.cloudOnlyCount)) cloud-only items "
+                + "(\(format(root.cloudOnlySize, args))) are not on this Mac"
+            line += args.metric == .logical
+                ? "; their logical size is included above."
+                : " and count as 0 bytes on disk."
+        }
         let errors = countErrors(root)
         if errors > 0 {
             line += "\n\(SizeFormatter.grouped(errors)) items could not be read (permissions?). "
@@ -126,12 +192,17 @@ func printError(_ message: String) {
     FileHandle.standardError.write(Data(("macsize: " + message + "\n").utf8))
 }
 
+/// Informational line on stderr (keeps stdout clean for `--json`).
+func printNote(_ message: String) {
+    FileHandle.standardError.write(Data(("macsize: " + message + "\n").utf8))
+}
+
 struct TreePrinter {
     let args: Arguments
     let total: Int64
 
     func printTree(_ root: FileNode) {
-        print(line(for: root, label: root.path, prefix: ""))
+        print(line(for: root, label: root.path + cloudNote(root), prefix: ""))
         printChildren(of: root, prefix: "", depth: 1)
     }
 
@@ -146,6 +217,7 @@ struct TreePrinter {
             let branch = isLast ? "└── " : "├── "
             var label = child.name + (child.isDirectory ? "/" : "")
             if child.isExcluded { label += "  (not scanned)" }
+            label += cloudNote(child)
             if child.errorCode != 0 { label += "  (\(String(cString: strerror(child.errorCode))))" }
             print(line(for: child, label: prefix + branch + label, prefix: prefix))
             if child.isDirectory {
@@ -156,6 +228,15 @@ struct TreePrinter {
             let rest = visible.suffix(hidden).reduce(Int64(0)) { $0 + $1.size(args.metric) }
             print(line(size: rest, label: prefix + "└── … \(hidden) more"))
         }
+    }
+
+    /// "  ☁︎" for a cloud-only item; "  (☁︎ 48 GB in cloud)" for a folder with cloud-only content.
+    private func cloudNote(_ node: FileNode) -> String {
+        if node.isCloudOnly {
+            return node.isDirectory ? "  ☁︎ (in cloud, not downloaded)" : "  ☁︎"
+        }
+        guard node.cloudOnlyCount > 0 else { return "" }
+        return "  (☁︎ \(format(node.cloudOnlySize, args)) in cloud)"
     }
 
     private func line(for node: FileNode, label: String, prefix: String) -> String {
@@ -178,11 +259,14 @@ struct TreePrinter {
 /// Prints a live status line on stderr while a scan runs.
 final class ProgressReporter: @unchecked Sendable {
     private let progress: ScanProgress
+    private let label: String
     private let timer: DispatchSourceTimer
     private let startedAt = Date()
+    private var stopped = false
 
-    init(progress: ScanProgress) {
+    init(progress: ScanProgress, label: String = "Scanning…") {
         self.progress = progress
+        self.label = label
         timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
     }
 
@@ -193,6 +277,8 @@ final class ProgressReporter: @unchecked Sendable {
     }
 
     func stop() {
+        guard !stopped else { return }
+        stopped = true
         timer.cancel()
         FileHandle.standardError.write(Data("\r\u{1B}[2K".utf8))
     }
@@ -201,7 +287,8 @@ final class ProgressReporter: @unchecked Sendable {
         let snapshot = progress.snapshot()
         let elapsed = Date().timeIntervalSince(startedAt)
         let text = String(
-            format: "\r\u{1B}[2KScanning… %@ files, %@ folders, %@ (%.1fs)",
+            format: "\r\u{1B}[2K%@ %@ files, %@ folders, %@ (%.1fs)",
+            label,
             SizeFormatter.grouped(snapshot.files),
             SizeFormatter.grouped(snapshot.directories),
             SizeFormatter.string(snapshot.bytes),

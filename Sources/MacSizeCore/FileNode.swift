@@ -51,6 +51,15 @@ public final class FileNode: Identifiable, @unchecked Sendable {
     /// True if this directory was intentionally not descended into
     /// (excluded path or a different volume).
     public internal(set) var isExcluded = false
+    /// True when this item's contents aren't on this Mac: a "dataless" cloud placeholder
+    /// (iCloud Drive, Google Drive, OneDrive, Dropbox… via File Provider, flag `SF_DATALESS`).
+    /// A dataless directory hasn't been enumerated locally, so its children are unknown.
+    public internal(set) var isCloudOnly = false
+    /// Logical bytes in this subtree that live only in cloud storage (not downloaded).
+    /// For a cloud-only file this is its logical size; directories aggregate it.
+    public internal(set) var cloudOnlySize: Int64 = 0
+    /// Number of cloud-only items in this subtree (1 for a cloud-only file or directory).
+    public internal(set) var cloudOnlyCount: Int = 0
 
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
 
@@ -74,6 +83,16 @@ public final class FileNode: Identifiable, @unchecked Sendable {
     }
 
     public var isDirectory: Bool { kind == .directory }
+
+    /// Logical bytes in this subtree that are actually stored on this Mac.
+    public var localLogicalSize: Int64 { max(0, logicalSize - cloudOnlySize) }
+
+    /// Mark a node as a cloud-only placeholder (used by scanners).
+    func markCloudOnly() {
+        isCloudOnly = true
+        cloudOnlySize = logicalSize
+        cloudOnlyCount = 1
+    }
 
     /// Full path, reconstructed by walking up to the root.
     public var path: String {
@@ -137,6 +156,8 @@ public final class FileNode: Identifiable, @unchecked Sendable {
             node.logicalSize -= logicalSize
             node.fileCount -= fileCount
             node.directoryCount -= dirs
+            node.cloudOnlySize -= cloudOnlySize
+            node.cloudOnlyCount -= cloudOnlyCount
             current = node.parent
         }
         self.parent = nil
@@ -150,6 +171,57 @@ public final class FileNode: Identifiable, @unchecked Sendable {
             node.children.sort { $0.size(metric) > $1.size(metric) }
             stack.append(contentsOf: node.children)
         }
+    }
+
+    /// Direct child with the given name (linear search; read-only).
+    func child(named name: String) -> FileNode? {
+        children.first { $0.name == name }
+    }
+
+    /// The node at absolute `path` inside this tree (`self` must be a root, whose
+    /// `name` is its full path), or nil. Read-only.
+    func descendant(atPath path: String) -> FileNode? {
+        if path == name { return self }
+        let prefix = name.hasSuffix("/") ? name : name + "/"
+        guard path.hasPrefix(prefix) else { return nil }
+        var node = self
+        for component in path.dropFirst(prefix.count).split(separator: "/") {
+            guard let next = node.child(named: String(component)) else { return nil }
+            node = next
+        }
+        return node
+    }
+
+    /// Recompute this directory's totals from its direct children (which must already
+    /// be correct) and re-sort them by `metric`. The modification time becomes the
+    /// newest of `ownModificationTime` (or, if nil, the current aggregate) and the
+    /// children's.
+    func reaggregate(ownModificationTime: TimeInterval?, metric: SizeMetric) {
+        guard kind == .directory else { return }
+        var allocated: Int64 = 0
+        var logical: Int64 = 0
+        var files = 0
+        var dirs = 0
+        var cloudSize: Int64 = 0
+        var cloudCount = 0
+        var newest = ownModificationTime ?? modificationTime
+        for child in children {
+            allocated += child.allocatedSize
+            logical += child.logicalSize
+            files += child.fileCount
+            if child.kind == .directory { dirs += 1 + child.directoryCount }
+            cloudSize += child.cloudOnlySize
+            cloudCount += child.cloudOnlyCount
+            newest = max(newest, child.modificationTime)
+        }
+        allocatedSize = allocated
+        logicalSize = logical
+        fileCount = files
+        directoryCount = dirs
+        modificationTime = newest
+        cloudOnlySize = cloudSize
+        cloudOnlyCount = cloudCount + (isCloudOnly ? 1 : 0)
+        children.sort { $0.size(metric) > $1.size(metric) }
     }
 
     /// Compute aggregate totals bottom-up and sort children largest first.
@@ -170,7 +242,11 @@ public final class FileNode: Identifiable, @unchecked Sendable {
             var files = 0
             var dirs = 0
             var newest = node.modificationTime
+            var cloudSize: Int64 = 0
+            var cloudCount = 0
             for child in node.children {
+                cloudSize += child.cloudOnlySize
+                cloudCount += child.cloudOnlyCount
                 allocated += child.allocatedSize
                 logical += child.logicalSize
                 files += child.fileCount
@@ -182,6 +258,10 @@ public final class FileNode: Identifiable, @unchecked Sendable {
             node.fileCount = files
             node.directoryCount = dirs
             node.modificationTime = newest
+            // A cloud-only directory wasn't enumerated locally, so its size is unknown (0);
+            // it still counts as one cloud-only item.
+            node.cloudOnlySize = cloudSize
+            node.cloudOnlyCount = cloudCount + (node.isCloudOnly ? 1 : 0)
             node.children.sort { $0.allocatedSize > $1.allocatedSize }
         }
     }

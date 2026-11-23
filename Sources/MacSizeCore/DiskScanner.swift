@@ -35,6 +35,13 @@ public struct ScanOptions: Sendable {
         self.applySystemExclusions = applySystemExclusions
     }
 
+    /// Stable identifier for options that change the resulting tree. Cached scans are
+    /// only reused when the fingerprint matches.
+    public var fingerprint: String {
+        let exclusions = effectiveExclusions.sorted().joined(separator: "\u{1F}")
+        return "v1|fs=\(stayOnFileSystem ? 1 : 0)|sys=\(applySystemExclusions ? 1 : 0)|ex=\(exclusions)"
+    }
+
     var effectiveExclusions: Set<String> {
         var paths = excludedPaths
         if applySystemExclusions { paths += Self.systemExcludedPaths }
@@ -124,10 +131,17 @@ public final class ScanProgress: @unchecked Sendable {
 /// are aggregated in a single pass once all workers are done.
 public final class DiskScanner: @unchecked Sendable {
     public let options: ScanOptions
-    public let progress = ScanProgress()
+    public let progress: ScanProgress
 
     public init(options: ScanOptions = ScanOptions()) {
         self.options = options
+        self.progress = ScanProgress()
+    }
+
+    /// Scanner that reports into an existing progress object (used by `IncrementalScanner`).
+    init(options: ScanOptions, progress: ScanProgress) {
+        self.options = options
+        self.progress = progress
     }
 
     public func cancel() { progress.cancel() }
@@ -155,6 +169,7 @@ public final class DiskScanner: @unchecked Sendable {
 
     /// Scan on the calling thread (worker threads are spawned internally).
     public func scanSynchronously(path: String) throws -> FileNode {
+        CloudStorage.disableAutomaticDownloads()  // never trigger cloud downloads
         let rootPath = Self.resolveRoot(path)
 
         var info = stat()
@@ -165,27 +180,27 @@ public final class DiskScanner: @unchecked Sendable {
         let modTime = Double(info.st_mtimespec.tv_sec) + Double(info.st_mtimespec.tv_nsec) / 1_000_000_000
         guard (info.st_mode & S_IFMT) == S_IFDIR else {
             let kind: FileKind = (info.st_mode & S_IFMT) == S_IFLNK ? .symlink : .file
-            return FileNode(
+            let node = FileNode(
                 name: rootPath,
                 kind: kind,
                 allocatedSize: Int64(info.st_blocks) * 512,
                 logicalSize: Int64(info.st_size),
                 modificationTime: modTime
             )
+            if info.st_flags & CloudStorage.datalessFlag != 0 { node.markCloudOnly() }
+            return node
         }
 
         let root = FileNode(name: rootPath, kind: .directory, modificationTime: modTime)
+        if info.st_flags & CloudStorage.datalessFlag != 0 {  // cloud-only folder: don't list it
+            root.markCloudOnly(); root.finalize(); return root
+        }
         let context = ScanContext(
             rootDevice: info.st_dev,
             options: options,
             progress: progress
         )
-        context.queue.push([WorkItem(node: root, path: rootPath)])
-
-        let threads = options.threadCount
-        DispatchQueue.concurrentPerform(iterations: threads) { _ in
-            context.runWorker()
-        }
+        context.scanSubtrees([WorkItem(node: root, path: rootPath)], threadCount: options.threadCount)
 
         if progress.isCancelled { throw ScanError.cancelled }
         if root.errorCode != 0 && root.children.isEmpty {
@@ -285,6 +300,18 @@ final class ScanContext: @unchecked Sendable {
         return seenHardLinks.insert(HardLinkKey(device: device, inode: inode)).inserted
     }
 
+    /// Scans each item's directory into a complete subtree below its (fresh, childless)
+    /// node, in parallel on `threadCount` workers. Blocks until done or cancelled.
+    /// Totals are not aggregated: call `finalize()` on each item's node afterwards.
+    /// A context's queue is single-use, so call this at most once per context.
+    func scanSubtrees(_ items: [WorkItem], threadCount: Int) {
+        guard !items.isEmpty else { return }
+        queue.push(items)
+        DispatchQueue.concurrentPerform(iterations: max(1, threadCount)) { _ in
+            runWorker()
+        }
+    }
+
     func runWorker() {
         let reader = BulkDirectoryReader()
         while let item = queue.pop() {
@@ -293,13 +320,16 @@ final class ScanContext: @unchecked Sendable {
                 queue.finish()
                 break
             }
-            let subdirectories = scanDirectory(item, reader: reader)
+            let subdirectories = listDirectory(item, reader: reader)
             queue.push(subdirectories)
             queue.finish()
         }
     }
 
-    private func scanDirectory(_ item: WorkItem, reader: BulkDirectoryReader) -> [WorkItem] {
+    /// Reads the direct entries of `item.path` into fresh children of `item.node`
+    /// (applying exclusions, stay-on-volume and hard-link dedupe) and returns the
+    /// subdirectories that still need scanning.
+    func listDirectory(_ item: WorkItem, reader: BulkDirectoryReader) -> [WorkItem] {
         let directory = item.node
         let fd = open(item.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else {
@@ -339,6 +369,7 @@ final class ScanContext: @unchecked Sendable {
                     parent: directory
                 )
                 children.append(child)
+                if CloudStorage.markIfDataless(child, entry) { return }  // cloud-only: don't descend
                 let childPath = prefix + entry.name
                 if exclusions.contains(childPath) {
                     child.isExcluded = true
@@ -365,6 +396,7 @@ final class ScanContext: @unchecked Sendable {
                 parent: directory
             )
             child.errorCode = Int32(bitPattern: entry.error)
+            _ = CloudStorage.markIfDataless(child, entry)  // cloud-only file (allocated ≈ 0)
             children.append(child)
             files += 1
             bytes += allocated

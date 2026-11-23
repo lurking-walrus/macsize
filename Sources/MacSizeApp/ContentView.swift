@@ -58,8 +58,8 @@ struct ContentView: View {
             Button { model.chooseFolder() } label: { Label("Scan Folder", systemImage: "folder.badge.gearshape") }
                 .help("Choose a folder or volume to scan (⌘O)")
             Button { model.rescan() } label: { Label("Rescan", systemImage: "arrow.clockwise") }
-                .disabled(model.rootURL == nil || model.isScanning)
-                .help("Scan the same location again (⌘R)")
+                .disabled(!model.canRescan)
+                .help("Update the results for the same location (⌘R). Full Rescan ignores saved results (⇧⌘R).")
             Picker("Size", selection: $model.metric) {
                 ForEach(SizeMetric.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
@@ -67,6 +67,7 @@ struct ContentView: View {
             .help("Size on disk accounts for APFS compression, sparse files and clones")
             Menu {
                 Toggle("Stay on Selected Volume", isOn: $model.stayOnFileSystem)
+                CloudFilterToggle()
                 Divider()
                 Button("Open Full Disk Access Settings…") { model.openFullDiskAccessSettings() }
             } label: {
@@ -142,9 +143,8 @@ struct StatusBar: View {
         HStack(spacing: 14) {
             Text("\(SizeFormatter.grouped(root.fileCount)) files")
             Text("\(SizeFormatter.grouped(root.directoryCount)) folders")
-            if let duration = model.scanDuration {
-                Text(String(format: "Scanned in %.1f s", duration))
-            }
+            FreshnessStatus()
+            CloudSummaryView(root: root)
             Spacer()
             if model.unreadableCount > 0 {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
@@ -247,7 +247,9 @@ struct ScanningView: View {
     var body: some View {
         VStack(spacing: 16) {
             ProgressView().controlSize(.large)
-            Text("Scanning \(model.rootURL?.path ?? "")…")
+            Text(model.isLoadingCache
+                 ? "Opening saved scan of \(model.rootURL?.path ?? "")…"
+                 : "Scanning \(model.rootURL?.path ?? "")…")
                 .font(.headline)
             HStack(spacing: 20) {
                 stat("Files", SizeFormatter.grouped(model.progress.files))

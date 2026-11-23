@@ -7,6 +7,8 @@ struct TreemapItem {
     let rect: CGRect
     let depth: Int
     let color: Color
+    /// Cloud-only placeholder: drawn hatched and desaturated so it's never mistaken for local data.
+    var isCloudOnly = false
 }
 
 /// Reference-type cache so layout results can be stored during drawing without
@@ -17,6 +19,8 @@ final class TreemapLayoutCache {
         let size: CGSize
         let revision: Int
         let metric: SizeMetric
+        let showCloudOnly: Bool
+        let cloudRevision: Int
     }
 
     var key: Key?
@@ -32,6 +36,11 @@ struct TreemapView: View {
 
     @State private var cache = TreemapLayoutCache()
     @State private var hovered: FileNode?
+    @State private var cloud = CloudActions.shared
+    @AppStorage(CloudDisplay.showCloudOnlyKey) private var showCloudOnly = true
+
+    /// Cloud-only items have no size on disk, so they only appear with Logical Size.
+    private static let cloudColor = Color(hue: 0.6, saturation: 0.06, brightness: 0.8)
 
     private static let maxDepth = 6
     private static let maxItems = 25_000
@@ -73,6 +82,9 @@ struct TreemapView: View {
             HStack(spacing: 8) {
                 Text(hovered.path).lineLimit(1).truncationMode(.head)
                 Text(SizeFormatter.string(hovered.size(model.metric))).fontWeight(.semibold)
+                if let cloudText = CloudDisplay.folderSummary(hovered) {
+                    Text(cloudText).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
             .font(.caption)
             .padding(.horizontal, 8)
@@ -88,7 +100,10 @@ struct TreemapView: View {
     /// Layout is cached and only recomputed when focus, size, metric or tree contents change,
     /// so hover-driven redraws stay cheap.
     private func layoutItems(size: CGSize) -> [TreemapItem] {
-        let key = TreemapLayoutCache.Key(focus: focus.id, size: size, revision: model.revision, metric: model.metric)
+        let key = TreemapLayoutCache.Key(
+            focus: focus.id, size: size, revision: model.revision, metric: model.metric,
+            showCloudOnly: showCloudOnly, cloudRevision: cloud.revision
+        )
         if cache.key == key { return cache.items }
         var result: [TreemapItem] = []
         result.reserveCapacity(1024)
@@ -101,10 +116,10 @@ struct TreemapView: View {
 
     private func layout(_ node: FileNode, in rect: CGRect, depth: Int, hue: Double?, into items: inout [TreemapItem]) {
         guard depth < Self.maxDepth, items.count < Self.maxItems else { return }
-        let children = node.children.filter { $0.size(model.metric) > 0 }
+        let children = node.children.filter { weight($0) > 0 && (showCloudOnly || !$0.isCloudOnly) }
         guard !children.isEmpty, rect.width > 3, rect.height > 3 else { return }
 
-        let rects = Treemap.squarify(children.map { Double($0.size(model.metric)) }, in: rect)
+        let rects = Treemap.squarify(children.map { Double(weight($0)) }, in: rect)
         for (index, (child, childRect)) in zip(children, rects).enumerated() {
             guard childRect.width >= 1.5, childRect.height >= 1.5 else { continue }
             if items.count >= Self.maxItems { return }
@@ -112,12 +127,14 @@ struct TreemapView: View {
             // Each top-level branch gets its own hue; files are tinted by extension.
             let branchHue = hue ?? Self.goldenHue(index)
             let color: Color
-            if child.isDirectory {
+            if child.isCloudOnly {
+                color = Self.cloudColor
+            } else if child.isDirectory {
                 color = Color(hue: branchHue, saturation: 0.35, brightness: max(0.35, 0.8 - Double(depth) * 0.08))
             } else {
                 color = Color(hue: Self.extensionHue(child.fileExtension, fallback: branchHue), saturation: 0.55, brightness: 0.85)
             }
-            items.append(TreemapItem(node: child, rect: childRect, depth: depth, color: color))
+            items.append(TreemapItem(node: child, rect: childRect, depth: depth, color: color, isCloudOnly: child.isCloudOnly))
 
             if child.isDirectory {
                 var inner = childRect.insetBy(dx: 2, dy: 2)
@@ -128,6 +145,13 @@ struct TreemapView: View {
                 layout(child, in: inner, depth: depth + 1, hue: branchHue, into: &items)
             }
         }
+    }
+
+    /// Area weight. With cloud-only items hidden, Logical Size uses only local bytes so the
+    /// remaining rectangles fill their parent (displayed totals are unchanged).
+    private func weight(_ node: FileNode) -> Int64 {
+        if !showCloudOnly && model.metric == .logical { return node.localLogicalSize }
+        return node.size(model.metric)
     }
 
     private func hit(_ point: CGPoint) -> TreemapItem? {
@@ -143,7 +167,9 @@ struct TreemapView: View {
             let rect = item.rect.insetBy(dx: 0.5, dy: 0.5)
             let path = Path(rect)
             context.fill(path, with: .color(item.color))
-            if item.node.isDirectory {
+            if item.isCloudOnly {
+                drawCloudHatching(in: rect, path: path, context: &context)
+            } else if item.node.isDirectory {
                 context.stroke(path, with: .color(.black.opacity(0.35)), lineWidth: 1)
             } else {
                 context.fill(path, with: .linearGradient(
@@ -166,9 +192,26 @@ struct TreemapView: View {
         }
     }
 
+    /// Diagonal stripes and a dashed outline: "in the cloud, not on this Mac".
+    private func drawCloudHatching(in rect: CGRect, path: Path, context: inout GraphicsContext) {
+        var stripes = Path()
+        let spacing: CGFloat = 6
+        var x = rect.minX - rect.height
+        while x < rect.maxX {
+            stripes.move(to: CGPoint(x: x, y: rect.maxY))
+            stripes.addLine(to: CGPoint(x: x + rect.height, y: rect.minY))
+            x += spacing
+        }
+        var clipped = context
+        clipped.clip(to: path)
+        clipped.stroke(stripes, with: .color(.black.opacity(0.16)), lineWidth: 1)
+        context.stroke(path, with: .color(.black.opacity(0.35)), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+    }
+
     private func drawLabel(for item: TreemapItem, in rect: CGRect, context: inout GraphicsContext) {
         guard rect.width > 44 else { return }
-        let size = SizeFormatter.string(item.node.size(model.metric))
+        var size = SizeFormatter.string(item.node.size(model.metric))
+        if item.isCloudOnly { size = "☁︎ " + size + " in cloud" }
         if item.node.isDirectory {
             guard rect.height > Self.headerHeight * 2.5 else { return }
             let text = Text("\(item.node.name)  \(size)")
