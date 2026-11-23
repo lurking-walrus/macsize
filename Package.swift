@@ -9,10 +9,20 @@ let package = Package(
         .executable(name: "macsize", targets: ["macsize"]),
         .executable(name: "MacSizeApp", targets: ["MacSizeApp"]),
     ],
+    dependencies: [
+        // Auto-updates for the app only. The CLI and core stay dependency-free.
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.1"),
+    ],
     targets: [
         .target(name: "MacSizeCore"),
         .executableTarget(name: "macsize", dependencies: ["MacSizeCore"]),
-        .executableTarget(name: "MacSizeApp", dependencies: ["MacSizeCore"]),
+        .executableTarget(
+            name: "MacSizeApp",
+            dependencies: [
+                "MacSizeCore",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ]
+        ),
         .testTarget(name: "MacSizeCoreTests", dependencies: ["MacSizeCore"]),
     ]
 )

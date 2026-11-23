@@ -217,8 +217,8 @@ final class ScanModel {
 
     /// Opens System Settings at Privacy & Security › Full Disk Access.
     func openFullDiskAccessSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
-            NSWorkspace.shared.open(url)
+        if !SystemSettings.openFullDiskAccess() {
+            errorMessage = "Couldn't open System Settings. Open it manually and go to Privacy & Security › Full Disk Access."
         }
     }
 

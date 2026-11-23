@@ -2,14 +2,16 @@ import Darwin
 import Foundation
 import MacSizeCore
 
-let version = "0.1.0"
 
 @main
 struct MacSizeCLI {
     static func main() {
         do {
             let args = try Arguments.parse(Array(CommandLine.arguments.dropFirst()))
+            // Background update check; finish() waits briefly and prints a one-line notice on stderr.
+            let notifier = UpdateNotifier.start(for: args)
             try run(args)
+            notifier?.finish()
         } catch let error as CLIError {
             printError(error.description)
             exit(2)
@@ -24,7 +26,7 @@ struct MacSizeCLI {
         case .help:
             print(Arguments.usage)
         case .version:
-            print("macsize \(version)")
+            print("\(MacSizeInfo.commandName) \(MacSizeInfo.version)")
         case .scan:
             let root = try scan(args)
             if args.json {
@@ -68,6 +70,8 @@ struct MacSizeCLI {
             }
         case .bench:
             try Benchmark(args: args).run()
+        case .update:
+            try UpdateCommand.run(checkOnly: args.checkOnly)
         }
     }
 
