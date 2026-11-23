@@ -142,51 +142,50 @@ public struct CommandLineToolManager: Sendable {
     }
 
     static func run(_ executable: String, arguments: [String], timeout: TimeInterval) -> String? {
-        // A just-written executable can briefly fail to launch with ETXTBSY ("text file busy")
-        // when another thread spawns a process that inherits a write descriptor to it.
-        // Retry a few times with a fresh Process; a Process can't be relaunched after a failure.
-        var launched: (Process, Pipe)?
+        // Capture stdout in a temporary file rather than a pipe. A pipe needs a reader thread
+        // and only reaches EOF once every inherited copy of its write end is closed, which made
+        // this flaky on busy machines (CI) where concurrent spawns or a starved reader thread
+        // left the output unread. A file has neither problem.
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macsize-run-\(UUID().uuidString).out")
+        guard FileManager.default.createFile(atPath: outputURL.path, contents: nil),
+              let outputHandle = try? FileHandle(forWritingTo: outputURL) else { return nil }
+        defer {
+            try? outputHandle.close()
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+
+        // Retry launch briefly: a just-written executable can transiently fail to exec.
+        // A Process can't be relaunched after a failure, so build a fresh one each time.
+        var launched: Process?
         for attempt in 0..<5 {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: executable)
             process.arguments = arguments
             process.standardInput = FileHandle.nullDevice
-            let pipe = Pipe()
-            process.standardOutput = pipe
+            process.standardOutput = outputHandle
             process.standardError = FileHandle.nullDevice
             do {
                 try process.run()
-                launched = (process, pipe)
+                launched = process
                 break
             } catch {
                 if attempt < 4 { Thread.sleep(forTimeInterval: 0.05 * Double(attempt + 1)) }
             }
         }
-        guard let (process, output) = launched else { return nil }
-
-        // Drain output concurrently so a chatty process can't block on a full pipe.
-        let collected = OutputBuffer()
-        let reader = output.fileHandleForReading
-        let done = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .utility).async {
-            collected.data = reader.readDataToEndOfFile()
-            done.signal()
-        }
+        guard let process = launched else { return nil }
 
         let deadline = Date().addingTimeInterval(timeout)
         while process.isRunning && Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.02)
+            Thread.sleep(forTimeInterval: 0.01)
         }
         if process.isRunning {
             process.terminate()
             return nil
         }
-        guard done.wait(timeout: .now() + 1) == .success else { return nil }
-        return String(decoding: collected.data, as: UTF8.self)
-    }
-
-    private final class OutputBuffer: @unchecked Sendable {
-        var data = Data()
+        process.waitUntilExit()
+        guard let data = try? Data(contentsOf: outputURL) else { return nil }
+        return String(decoding: data, as: UTF8.self)
     }
 
     static func resolveSymlink(_ path: String) -> String {
