@@ -1,3 +1,5 @@
+<p align="center"><img src="Resources/AppIcon/AppIcon-1024.png" width="128" alt="MacSize icon"></p>
+
 # MacSize
 
 A fast, native disk-usage analyzer for macOS, inspired by TreeSize. It comes as
