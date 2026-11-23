@@ -51,6 +51,15 @@ public final class FileNode: Identifiable, @unchecked Sendable {
     /// True if this directory was intentionally not descended into
     /// (excluded path or a different volume).
     public internal(set) var isExcluded = false
+    /// True when this item's contents aren't on this Mac: a "dataless" cloud placeholder
+    /// (iCloud Drive, Google Drive, OneDrive, Dropbox… via File Provider, flag `SF_DATALESS`).
+    /// A dataless directory hasn't been enumerated locally, so its children are unknown.
+    public internal(set) var isCloudOnly = false
+    /// Logical bytes in this subtree that live only in cloud storage (not downloaded).
+    /// For a cloud-only file this is its logical size; directories aggregate it.
+    public internal(set) var cloudOnlySize: Int64 = 0
+    /// Number of cloud-only items in this subtree (1 for a cloud-only file or directory).
+    public internal(set) var cloudOnlyCount: Int = 0
 
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
 
@@ -74,6 +83,16 @@ public final class FileNode: Identifiable, @unchecked Sendable {
     }
 
     public var isDirectory: Bool { kind == .directory }
+
+    /// Logical bytes in this subtree that are actually stored on this Mac.
+    public var localLogicalSize: Int64 { max(0, logicalSize - cloudOnlySize) }
+
+    /// Mark a node as a cloud-only placeholder (used by scanners).
+    func markCloudOnly() {
+        isCloudOnly = true
+        cloudOnlySize = logicalSize
+        cloudOnlyCount = 1
+    }
 
     /// Full path, reconstructed by walking up to the root.
     public var path: String {
@@ -137,6 +156,8 @@ public final class FileNode: Identifiable, @unchecked Sendable {
             node.logicalSize -= logicalSize
             node.fileCount -= fileCount
             node.directoryCount -= dirs
+            node.cloudOnlySize -= cloudOnlySize
+            node.cloudOnlyCount -= cloudOnlyCount
             current = node.parent
         }
         self.parent = nil
@@ -170,7 +191,11 @@ public final class FileNode: Identifiable, @unchecked Sendable {
             var files = 0
             var dirs = 0
             var newest = node.modificationTime
+            var cloudSize: Int64 = 0
+            var cloudCount = 0
             for child in node.children {
+                cloudSize += child.cloudOnlySize
+                cloudCount += child.cloudOnlyCount
                 allocated += child.allocatedSize
                 logical += child.logicalSize
                 files += child.fileCount
@@ -182,6 +207,10 @@ public final class FileNode: Identifiable, @unchecked Sendable {
             node.fileCount = files
             node.directoryCount = dirs
             node.modificationTime = newest
+            // A cloud-only directory wasn't enumerated locally, so its size is unknown (0);
+            // it still counts as one cloud-only item.
+            node.cloudOnlySize = cloudSize
+            node.cloudOnlyCount = cloudCount + (node.isCloudOnly ? 1 : 0)
             node.children.sort { $0.allocatedSize > $1.allocatedSize }
         }
     }
