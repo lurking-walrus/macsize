@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct MacSizeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = ScanModel()
+    @State private var updater = Updater()
 
     var body: some Scene {
         WindowGroup("MacSize") {
@@ -24,6 +25,11 @@ struct MacSizeApp: App {
                 .task { model.scanLaunchArgumentIfPresent() }
         }
         .commands {
+            CommandGroup(after: .appInfo) {
+                if updater.isAvailable {
+                    CheckForUpdatesCommand(updater: updater)
+                }
+            }
             CommandGroup(after: .newItem) {
                 Button("Scan Folder…") { model.chooseFolder() }
                     .keyboardShortcut("o")
@@ -42,6 +48,10 @@ struct MacSizeApp: App {
                     .keyboardShortcut(.upArrow, modifiers: [.command, .shift])
                     .disabled(model.root == nil)
             }
+        }
+
+        Settings {
+            UpdateSettingsView(updater: updater)
         }
     }
 }

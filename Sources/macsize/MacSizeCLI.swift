@@ -8,7 +8,10 @@ struct MacSizeCLI {
     static func main() {
         do {
             let args = try Arguments.parse(Array(CommandLine.arguments.dropFirst()))
+            // Background update check; finish() waits briefly and prints a one-line notice on stderr.
+            let notifier = UpdateNotifier.start(for: args)
             try run(args)
+            notifier?.finish()
         } catch let error as CLIError {
             printError(error.description)
             exit(2)
@@ -67,6 +70,8 @@ struct MacSizeCLI {
             }
         case .bench:
             try Benchmark(args: args).run()
+        case .update:
+            try UpdateCommand.run(checkOnly: args.checkOnly)
         }
     }
 
