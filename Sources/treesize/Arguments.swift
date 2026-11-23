@@ -63,6 +63,8 @@ struct Arguments {
     static func parse(_ raw: [String]) throws -> Arguments {
         var args = Arguments()
         var remaining = raw[...]
+        // `swift run treesize -- args` forwards the separator itself; ignore a leading one.
+        if remaining.first == "--" { remaining.removeFirst() }
         var positional: [String] = []
 
         func value(for flag: String) throws -> String {
