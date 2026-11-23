@@ -1,7 +1,7 @@
-# treesize-mac
+# MacSize
 
 A fast, native disk-usage analyzer for macOS, inspired by TreeSize. It comes as
-a SwiftUI desktop app and a command-line tool (`treesize`), both built on the same scanner engine.
+a SwiftUI desktop app and a command-line tool (`macsize`), both built on the same scanner engine.
 
 - **Fast scanning.** Uses `getattrlistbulk(2)` to read many directory entries per
   syscall, with a pool of worker threads walking the tree in parallel. It's typically 3–4×
@@ -57,20 +57,20 @@ scripts/build-app.sh
 ```
 
 ```bash
-open build/TreeSize.app
+open build/MacSize.app
 ```
 
 The app opens on a welcome screen. Choose **Home Folder**, a volume, or **Choose Folder…** (⌘O).
 
-To keep the app, drag `build/TreeSize.app` into your `Applications` folder, or run:
+To keep the app, drag `build/MacSize.app` into your `Applications` folder, or run:
 
 ```bash
-cp -R build/TreeSize.app /Applications/
+cp -R build/MacSize.app /Applications/
 ```
 
 ### 4. (Optional) Install the command-line tool
 
-This installs `treesize` into `~/.local/bin`, so it doesn't need `sudo`:
+This installs `macsize` into `~/.local/bin`, so it doesn't need `sudo`:
 
 ```bash
 PREFIX="$HOME/.local" scripts/install.sh
@@ -85,7 +85,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 Then try it:
 
 ```bash
-treesize ~ -d 1
+macsize ~ -d 1
 ```
 
 To install system-wide in `/usr/local/bin` instead, run `sudo scripts/install.sh`.
@@ -97,11 +97,11 @@ users' folders. Without Full Disk Access these show a 🔒 icon and are counted 
 
 1. Open **System Settings › Privacy & Security › Full Disk Access**. The app's status bar
    has a **Grant Full Disk Access…** link that opens it directly.
-2. Click **+** and add `TreeSize.app`. For the CLI, add your terminal app (Terminal, iTerm, …) instead.
-3. Quit and reopen TreeSize (or your terminal), then rescan with ⌘R.
+2. Click **+** and add `MacSize.app`. For the CLI, add your terminal app (Terminal, iTerm, …) instead.
+3. Quit and reopen MacSize (or your terminal), then rescan with ⌘R.
 
 > **Rebuilt the app and access stopped working?** Local builds use an ad-hoc signature that
-> changes on every build, so macOS treats each rebuild as a new app. Remove TreeSize from the
+> changes on every build, so macOS treats each rebuild as a new app. Remove MacSize from the
 > Full Disk Access list and add it again. To avoid this, sign with your own certificate (see
 > [Build options](#build-options)).
 
@@ -123,34 +123,34 @@ users' folders. Without Full Disk Access these show a 🔒 icon and are counted 
 During development you can also run the app straight from the package without building a bundle:
 
 ```bash
-swift run TreeSizeApp
+swift run MacSizeApp
 ```
 
 To scan a path on launch:
 
 ```bash
-swift run TreeSizeApp -- ~/Downloads
+swift run MacSizeApp -- ~/Downloads
 ```
 
 ## Using the CLI
 
 ```bash
-treesize --help
+macsize --help
 ```
 
 ```bash
-treesize ~/Downloads                 # size-sorted tree, 2 levels deep, top 20 per folder
-treesize ~ -d 1 -n 10 --min-size 1G  # one level, top 10, hide entries under 1 GB
-treesize largest ~ -c 50             # 50 largest files
-treesize types ~/Movies              # usage by file extension
-treesize ~/Projects --json -d all    # full tree as JSON
-treesize bench /Applications --runs 3
+macsize ~/Downloads                 # size-sorted tree, 2 levels deep, top 20 per folder
+macsize ~ -d 1 -n 10 --min-size 1G  # one level, top 10, hide entries under 1 GB
+macsize largest ~ -c 50             # 50 largest files
+macsize types ~/Movies              # usage by file extension
+macsize ~/Projects --json -d all    # full tree as JSON
+macsize bench /Applications --runs 3
 ```
 
-If you haven't installed it, run it in place with `swift run treesize -- <args>`, or build
-once with `swift build -c release --product treesize` and use `.build/release/treesize`.
+If you haven't installed it, run it in place with `swift run macsize -- <args>`, or build
+once with `swift build -c release --product macsize` and use `.build/release/macsize`.
 
-Example output (`treesize /usr/share -d 1 -n 4`):
+Example output (`macsize /usr/share -d 1 -n 4`):
 
 ```
     266 MB 100.0%  ████████████  /usr/share
@@ -172,7 +172,7 @@ Other options:
 - `-j`, `--threads N`: number of worker threads.
 - `-q`, `--quiet`: don't show progress.
 
-Run `treesize --help` for the full list.
+Run `macsize --help` for the full list.
 
 When the scan root is `/`, a few system paths are skipped by default:
 
@@ -183,7 +183,7 @@ Pass `--no-system-excludes` to include them.
 
 ### Benchmarking against `du`
 
-`treesize bench PATH` runs the scanner and `du -sk` on the same path, alternating which goes
+`macsize bench PATH` runs the scanner and `du -sk` on the same path, alternating which goes
 first, and reports the best time and the size difference. Small differences are expected
 because `du` also counts the blocks used by directories themselves.
 
@@ -196,8 +196,8 @@ particular machine or developer is hardcoded:
 
 | Variable        | Default                | Purpose                                  |
 |-----------------|------------------------|------------------------------------------|
-| `APP_NAME`      | `TreeSize`             | Bundle and executable name               |
-| `BUNDLE_ID`     | `com.example.treesize` | `CFBundleIdentifier`; set your own       |
+| `APP_NAME`      | `MacSize`             | Bundle and executable name               |
+| `BUNDLE_ID`     | `com.example.macsize` | `CFBundleIdentifier`; set your own       |
 | `VERSION`       | `0.1.0`                | `CFBundleShortVersionString`             |
 | `BUILD_NUMBER`  | `1`                    | `CFBundleVersion`                        |
 | `CONFIGURATION` | `release`              | `swift build` configuration              |
@@ -214,14 +214,14 @@ security find-identity -v -p codesigning
 Then build with your identity:
 
 ```bash
-BUNDLE_ID=io.github.yourname.treesize SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" scripts/build-app.sh
+BUNDLE_ID=io.github.yourname.macsize SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" scripts/build-app.sh
 ```
 
 `scripts/install.sh` installs the CLI and, optionally, the app:
 
 | Variable   | Default      | Purpose                                     |
 |------------|--------------|---------------------------------------------|
-| `PREFIX`   | `/usr/local` | CLI goes to `$PREFIX/bin/treesize`          |
+| `PREFIX`   | `/usr/local` | CLI goes to `$PREFIX/bin/macsize`          |
 | `APP_DEST` | *(empty)*    | If set, the app is also copied here         |
 
 ```bash
@@ -231,15 +231,15 @@ PREFIX="$HOME/.local" APP_DEST="$HOME/Applications" scripts/install.sh
 ## Uninstall
 
 ```bash
-rm -rf /Applications/TreeSize.app ~/Applications/TreeSize.app
+rm -rf /Applications/MacSize.app ~/Applications/MacSize.app
 ```
 
 ```bash
-rm -f ~/.local/bin/treesize /usr/local/bin/treesize
+rm -f ~/.local/bin/macsize /usr/local/bin/macsize
 ```
 
 ```bash
-defaults delete com.example.treesize
+defaults delete com.example.macsize
 ```
 
 If you built with a custom `BUNDLE_ID`, use that ID in the `defaults delete` command instead.
@@ -253,7 +253,7 @@ If you built with a custom `BUNDLE_ID`, use that ID in the `defaults delete` com
 - **`swift test` fails with `no such module 'Testing'`**: tests need the full Xcode, not
   just the Command Line Tools.
 - **Folders show a 🔒 or sizes look too small**: grant Full Disk Access (step 5).
-- **`treesize: command not found`**: the install directory isn't on your `PATH` (step 4).
+- **`macsize: command not found`**: the install directory isn't on your `PATH` (step 4).
 
 ---
 
@@ -262,12 +262,12 @@ If you built with a custom `BUNDLE_ID`, use that ID in the `defaults delete` com
 ```
 Package.swift
 Sources/
-  TreeSizeCore/   Scanner engine (library): getattrlistbulk reader, parallel scanner,
+  MacSizeCore/   Scanner engine (library): getattrlistbulk reader, parallel scanner,
                   tree model, treemap layout, JSON export, size formatting
-  treesize/       Command-line tool
-  TreeSizeApp/    SwiftUI app (outline table + treemap)
+  macsize/       Command-line tool
+  MacSizeApp/    SwiftUI app (outline table + treemap)
 Tests/
-  TreeSizeCoreTests/
+  MacSizeCoreTests/
 scripts/
   build-app.sh    Wraps the app executable in a signed .app bundle
   install.sh      Installs the CLI (and optionally the app)
@@ -280,7 +280,7 @@ swift build      # all targets (debug)
 swift test       # scanner, formatter and treemap tests
 ```
 
-You can also open `Package.swift` in Xcode (`xed .`) and run the `TreeSizeApp` scheme.
+You can also open `Package.swift` in Xcode (`xed .`) and run the `MacSizeApp` scheme.
 
 The tests build throwaway directory trees in the system temporary directory. They cover
 nested totals, buffer refills on large directories, hard links, symlinks, exclusions, the

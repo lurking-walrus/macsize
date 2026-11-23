@@ -1,5 +1,5 @@
 import SwiftUI
-import TreeSizeCore
+import MacSizeCore
 
 /// One laid-out rectangle in the treemap.
 struct TreemapItem {

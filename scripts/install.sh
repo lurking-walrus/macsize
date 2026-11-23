@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the `treesize` CLI and (optionally) TreeSize.app.
+# Install the `macsize` CLI and (optionally) MacSize.app.
 #
 # Environment variables:
 #   PREFIX        CLI install prefix; binary goes to $PREFIX/bin   (default: /usr/local)
@@ -16,17 +16,17 @@ PREFIX="${PREFIX:-/usr/local}"
 APP_DEST="${APP_DEST:-}"
 
 cd "$ROOT_DIR"
-echo "==> Building treesize CLI (release)"
-swift build -c release --product treesize
+echo "==> Building macsize CLI (release)"
+swift build -c release --product macsize
 BIN_DIR="$(swift build -c release --show-bin-path)"
 
 mkdir -p "$PREFIX/bin"
-install -m 0755 "$BIN_DIR/treesize" "$PREFIX/bin/treesize"
-echo "==> Installed $PREFIX/bin/treesize"
+install -m 0755 "$BIN_DIR/macsize" "$PREFIX/bin/macsize"
+echo "==> Installed $PREFIX/bin/macsize"
 
 if [[ -n "$APP_DEST" ]]; then
     OUTPUT_DIR="$ROOT_DIR/build" "$ROOT_DIR/scripts/build-app.sh"
-    APP_NAME="${APP_NAME:-TreeSize}"
+    APP_NAME="${APP_NAME:-MacSize}"
     mkdir -p "$APP_DEST"
     rm -rf "$APP_DEST/$APP_NAME.app"
     cp -R "$ROOT_DIR/build/$APP_NAME.app" "$APP_DEST/"

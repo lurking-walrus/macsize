@@ -144,7 +144,7 @@ public final class DiskScanner: @unchecked Sendable {
                         continuation.resume(throwing: error)
                     }
                 }
-                thread.name = "TreeSize scan coordinator"
+                thread.name = "MacSize scan coordinator"
                 thread.stackSize = 8 << 20
                 thread.start()
             }

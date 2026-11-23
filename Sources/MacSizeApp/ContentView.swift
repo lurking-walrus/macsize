@@ -1,5 +1,5 @@
 import SwiftUI
-import TreeSizeCore
+import MacSizeCore
 
 struct ContentView: View {
     @Environment(ScanModel.self) private var model
@@ -15,7 +15,7 @@ struct ContentView: View {
                 WelcomeView()
             }
         }
-        .navigationTitle(model.rootURL?.lastPathComponent ?? "TreeSize")
+        .navigationTitle(model.rootURL?.lastPathComponent ?? "MacSize")
         .navigationSubtitle(model.root.map { "\(SizeFormatter.string($0.size(model.metric))) · \(model.metric.displayName)" } ?? "")
         .toolbar { toolbar }
         .alert(

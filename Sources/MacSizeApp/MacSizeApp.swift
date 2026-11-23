@@ -12,12 +12,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct TreeSizeApp: App {
+struct MacSizeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = ScanModel()
 
     var body: some Scene {
-        WindowGroup("TreeSize") {
+        WindowGroup("MacSize") {
             ContentView()
                 .environment(model)
                 .frame(minWidth: 900, minHeight: 560)

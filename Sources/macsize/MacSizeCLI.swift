@@ -1,11 +1,11 @@
 import Darwin
 import Foundation
-import TreeSizeCore
+import MacSizeCore
 
 let version = "0.1.0"
 
 @main
-struct TreeSizeCLI {
+struct MacSizeCLI {
     static func main() {
         do {
             let args = try Arguments.parse(Array(CommandLine.arguments.dropFirst()))
@@ -24,7 +24,7 @@ struct TreeSizeCLI {
         case .help:
             print(Arguments.usage)
         case .version:
-            print("treesize \(version)")
+            print("macsize \(version)")
         case .scan:
             let root = try scan(args)
             if args.json {
@@ -119,7 +119,7 @@ func pad(_ text: String, _ width: Int) -> String {
 }
 
 func printError(_ message: String) {
-    FileHandle.standardError.write(Data(("treesize: " + message + "\n").utf8))
+    FileHandle.standardError.write(Data(("macsize: " + message + "\n").utf8))
 }
 
 struct TreePrinter {
