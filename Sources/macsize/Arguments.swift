@@ -2,7 +2,7 @@ import Foundation
 import MacSizeCore
 
 enum Command: String {
-    case scan, largest, types, bench, help, version
+    case scan, largest, types, bench, update, help, version
 }
 
 struct CLIError: Error, CustomStringConvertible {
@@ -28,6 +28,7 @@ struct Arguments {
     var excludes: [String] = []
     var systemExclusions = true
     var runs = 1
+    var checkOnly = false
 
     static let usage = """
     macsize — fast disk usage analyzer for macOS
@@ -37,6 +38,7 @@ struct Arguments {
       macsize largest [PATH] [options]     List the largest files
       macsize types [PATH] [options]       Summarize usage by file extension
       macsize bench [PATH] [options]       Compare scan speed and totals against du(1)
+      macsize update [--check]             Update macsize to the latest release
       macsize help | --help                Show this help
       macsize version | --version          Show version
 
@@ -58,6 +60,11 @@ struct Arguments {
           --no-system-excludes
                               Also scan \(ScanOptions.systemExcludedPaths.joined(separator: ", "))
           --runs N            Repetitions for `bench` (default 1; best time reported)
+          --check             With `update`: only report whether a newer version exists
+
+    ENVIRONMENT
+      MACSIZE_NO_UPDATE_NOTIFIER=1
+                              Don't check for new versions in the background
     """
 
     static func parse(_ raw: [String]) throws -> Arguments {
@@ -104,6 +111,7 @@ struct Arguments {
             case "-e", "--exclude": args.excludes.append(try value(for: arg))
             case "--no-system-excludes": args.systemExclusions = false
             case "--runs": args.runs = max(1, try integer(for: arg) ?? 1)
+            case "--check": args.checkOnly = true
             case "--":
                 positional.append(contentsOf: remaining)
                 remaining = []
@@ -113,6 +121,12 @@ struct Arguments {
             }
         }
 
+        if args.checkOnly && args.command != .update && args.command != .help {
+            throw CLIError("--check is only valid with `macsize update`")
+        }
+        if args.command == .update && !positional.isEmpty {
+            throw CLIError("`macsize update` doesn't take a PATH")
+        }
         if positional.count > 1 { throw CLIError("Expected a single PATH, got: \(positional.joined(separator: " "))") }
         if let path = positional.first { args.path = path }
         return args
