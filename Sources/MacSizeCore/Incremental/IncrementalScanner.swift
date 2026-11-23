@@ -254,26 +254,37 @@ public final class IncrementalScanner: @unchecked Sendable {
 
     /// Re-lists every target in parallel. Never mutates the old tree.
     private func relist(_ targets: [Target], context: ScanContext) -> [Outcome] {
-        let lock = NSLock()
-        var outcomes = [Outcome?](repeating: nil, count: targets.count)
-        var nextIndex = 0
+        /// Work cursor and results shared by the workers; every access holds `lock`.
+        final class SharedState: @unchecked Sendable {
+            let lock = NSLock()
+            var nextIndex = 0
+            var outcomes: [Outcome?]
+            init(count: Int) { outcomes = Array(repeating: nil, count: count) }
+
+            func claimIndex() -> Int {
+                lock.lock(); defer { lock.unlock() }
+                let index = nextIndex
+                nextIndex += 1
+                return index
+            }
+
+            func store(_ outcome: Outcome, at index: Int) {
+                lock.lock(); outcomes[index] = outcome; lock.unlock()
+            }
+        }
+
+        let state = SharedState(count: targets.count)
         let workers = max(1, min(options.threadCount, targets.count))
 
         DispatchQueue.concurrentPerform(iterations: workers) { _ in
             let reader = BulkDirectoryReader()
             while true {
-                lock.lock()
-                let index = nextIndex
-                nextIndex += 1
-                lock.unlock()
+                let index = state.claimIndex()
                 guard index < targets.count, !progress.isCancelled else { return }
-                let outcome = relist(targets[index], context: context, reader: reader)
-                lock.lock()
-                outcomes[index] = outcome
-                lock.unlock()
+                state.store(relist(targets[index], context: context, reader: reader), at: index)
             }
         }
-        return outcomes.compactMap { $0 }
+        return state.outcomes.compactMap { $0 }
     }
 
     private func relist(_ target: Target, context: ScanContext, reader: BulkDirectoryReader) -> Outcome {
