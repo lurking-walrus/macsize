@@ -35,6 +35,13 @@ public struct ScanOptions: Sendable {
         self.applySystemExclusions = applySystemExclusions
     }
 
+    /// Stable identifier for options that change the resulting tree. Cached scans are
+    /// only reused when the fingerprint matches.
+    public var fingerprint: String {
+        let exclusions = effectiveExclusions.sorted().joined(separator: "\u{1F}")
+        return "v1|fs=\(stayOnFileSystem ? 1 : 0)|sys=\(applySystemExclusions ? 1 : 0)|ex=\(exclusions)"
+    }
+
     var effectiveExclusions: Set<String> {
         var paths = excludedPaths
         if applySystemExclusions { paths += Self.systemExcludedPaths }
