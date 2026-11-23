@@ -302,3 +302,25 @@ final class Fixture {
         #expect(FileManager.default.fileExists(atPath: bin + "/macsize"))
     }
 }
+
+@Suite struct FullDiskAccessTests {
+    @Test func readableProbeMeansGranted() throws {
+        let fx = try Fixture()
+        let file = try fx.file("probe.db", bytes: 4)
+        #expect(FullDiskAccess.check(probePaths: [fx.root.path + "/missing", file.path]) == .granted)
+    }
+
+    @Test func permissionDeniedMeansDenied() throws {
+        let fx = try Fixture()
+        let file = try fx.file("locked.db", bytes: 4)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path) }
+        guard getuid() != 0 else { return }  // root ignores file modes
+        #expect(FullDiskAccess.check(probePaths: [file.path, fx.root.path + "/missing"]) == .denied)
+    }
+
+    @Test func missingProbesAreUnknown() {
+        #expect(FullDiskAccess.check(probePaths: ["/nonexistent-\(UUID().uuidString)"]) == .unknown)
+        #expect(FullDiskAccess.check(probePaths: []) == .unknown)
+    }
+}
