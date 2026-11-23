@@ -1,8 +1,10 @@
 import AppKit
 import SwiftUI
+import MacSizeCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        CloudStorage.disableAutomaticDownloads()  // MacSize must never download cloud files
         // Needed when launched as a bare executable (e.g. `swift run`) rather than an .app bundle.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)

@@ -67,6 +67,7 @@ struct ContentView: View {
             .help("Size on disk accounts for APFS compression, sparse files and clones")
             Menu {
                 Toggle("Stay on Selected Volume", isOn: $model.stayOnFileSystem)
+                CloudFilterToggle()
                 Divider()
                 Button("Open Full Disk Access Settings…") { model.openFullDiskAccessSettings() }
             } label: {
@@ -143,6 +144,7 @@ struct StatusBar: View {
             Text("\(SizeFormatter.grouped(root.fileCount)) files")
             Text("\(SizeFormatter.grouped(root.directoryCount)) folders")
             FreshnessStatus()
+            CloudSummaryView(root: root)
             Spacer()
             if model.unreadableCount > 0 {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)

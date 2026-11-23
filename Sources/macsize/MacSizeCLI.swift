@@ -6,6 +6,8 @@ import MacSizeCore
 @main
 struct MacSizeCLI {
     static func main() {
+        // Never let a scan download cloud (File Provider) placeholders. See CloudStorage.
+        CloudStorage.disableAutomaticDownloads()
         do {
             let args = try Arguments.parse(Array(CommandLine.arguments.dropFirst()))
             // Background update check; finish() waits briefly and prints a one-line notice on stderr.
@@ -143,6 +145,13 @@ struct MacSizeCLI {
     static func printSummary(_ root: FileNode, args: Arguments) {
         var line = "\n\(format(root.size(args.metric), args)) in \(SizeFormatter.grouped(root.fileCount)) files, "
             + "\(SizeFormatter.grouped(root.directoryCount)) folders (\(args.metric.displayName.lowercased()))"
+        if root.cloudOnlyCount > 0 {
+            line += "\n☁︎ \(SizeFormatter.grouped(root.cloudOnlyCount)) cloud-only items "
+                + "(\(format(root.cloudOnlySize, args))) are not on this Mac"
+            line += args.metric == .logical
+                ? "; their logical size is included above."
+                : " and count as 0 bytes on disk."
+        }
         let errors = countErrors(root)
         if errors > 0 {
             line += "\n\(SizeFormatter.grouped(errors)) items could not be read (permissions?). "
@@ -193,7 +202,7 @@ struct TreePrinter {
     let total: Int64
 
     func printTree(_ root: FileNode) {
-        print(line(for: root, label: root.path, prefix: ""))
+        print(line(for: root, label: root.path + cloudNote(root), prefix: ""))
         printChildren(of: root, prefix: "", depth: 1)
     }
 
@@ -208,6 +217,7 @@ struct TreePrinter {
             let branch = isLast ? "└── " : "├── "
             var label = child.name + (child.isDirectory ? "/" : "")
             if child.isExcluded { label += "  (not scanned)" }
+            label += cloudNote(child)
             if child.errorCode != 0 { label += "  (\(String(cString: strerror(child.errorCode))))" }
             print(line(for: child, label: prefix + branch + label, prefix: prefix))
             if child.isDirectory {
@@ -218,6 +228,15 @@ struct TreePrinter {
             let rest = visible.suffix(hidden).reduce(Int64(0)) { $0 + $1.size(args.metric) }
             print(line(size: rest, label: prefix + "└── … \(hidden) more"))
         }
+    }
+
+    /// "  ☁︎" for a cloud-only item; "  (☁︎ 48 GB in cloud)" for a folder with cloud-only content.
+    private func cloudNote(_ node: FileNode) -> String {
+        if node.isCloudOnly {
+            return node.isDirectory ? "  ☁︎ (in cloud, not downloaded)" : "  ☁︎"
+        }
+        guard node.cloudOnlyCount > 0 else { return "" }
+        return "  (☁︎ \(format(node.cloudOnlySize, args)) in cloud)"
     }
 
     private func line(for node: FileNode, label: String, prefix: String) -> String {

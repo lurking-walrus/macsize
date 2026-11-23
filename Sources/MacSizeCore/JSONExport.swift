@@ -12,6 +12,12 @@ public struct NodeReport: Encodable, Sendable {
     public var modified: Date
     public var error: String?
     public var excluded: Bool?
+    /// `true` for a cloud-only placeholder whose contents aren't on this Mac (omitted otherwise).
+    public var cloudOnly: Bool?
+    /// Logical bytes in this subtree that are only in the cloud (not downloaded).
+    public var cloudOnlySize: Int64
+    /// Number of cloud-only items in this subtree.
+    public var cloudOnlyCount: Int
     public var children: [NodeReport]?
 
     /// - Parameters:
@@ -36,6 +42,9 @@ public struct NodeReport: Encodable, Sendable {
         modified = Date(timeIntervalSince1970: node.modificationTime)
         error = node.errorCode != 0 ? String(cString: strerror(node.errorCode)) : nil
         excluded = node.isExcluded ? true : nil
+        cloudOnly = node.isCloudOnly ? true : nil
+        cloudOnlySize = node.cloudOnlySize
+        cloudOnlyCount = node.cloudOnlyCount
 
         if node.isDirectory, maxDepth.map({ $0 > 0 }) ?? true {
             var kids = node.children.filter { $0.size(metric) >= minimumSize }
