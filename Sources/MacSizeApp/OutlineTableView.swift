@@ -1,7 +1,7 @@
 import SwiftUI
-import TreeSizeCore
+import MacSizeCore
 
-/// TreeSize-style hierarchical table: name, size bar, % of parent, file count, date.
+/// MacSize-style hierarchical table: name, size bar, % of parent, file count, date.
 struct OutlineTableView: View {
     @Environment(ScanModel.self) private var model
     let root: FileNode

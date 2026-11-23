@@ -2,17 +2,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "TreeSize",
+    name: "MacSize",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "TreeSizeCore", targets: ["TreeSizeCore"]),
-        .executable(name: "treesize", targets: ["treesize"]),
-        .executable(name: "TreeSizeApp", targets: ["TreeSizeApp"]),
+        .library(name: "MacSizeCore", targets: ["MacSizeCore"]),
+        .executable(name: "macsize", targets: ["macsize"]),
+        .executable(name: "MacSizeApp", targets: ["MacSizeApp"]),
     ],
     targets: [
-        .target(name: "TreeSizeCore"),
-        .executableTarget(name: "treesize", dependencies: ["TreeSizeCore"]),
-        .executableTarget(name: "TreeSizeApp", dependencies: ["TreeSizeCore"]),
-        .testTarget(name: "TreeSizeCoreTests", dependencies: ["TreeSizeCore"]),
+        .target(name: "MacSizeCore"),
+        .executableTarget(name: "macsize", dependencies: ["MacSizeCore"]),
+        .executableTarget(name: "MacSizeApp", dependencies: ["MacSizeCore"]),
+        .testTarget(name: "MacSizeCoreTests", dependencies: ["MacSizeCore"]),
     ]
 )

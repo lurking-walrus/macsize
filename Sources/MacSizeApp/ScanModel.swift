@@ -1,6 +1,6 @@
 import AppKit
 import Observation
-import TreeSizeCore
+import MacSizeCore
 
 @MainActor
 @Observable
@@ -56,7 +56,7 @@ final class ScanModel {
         if let rootURL { scan(rootURL) }
     }
 
-    /// Lets the app be launched as `TreeSize /some/path` to scan immediately.
+    /// Lets the app be launched as `MacSize /some/path` to scan immediately.
     func scanLaunchArgumentIfPresent() {
         guard root == nil, !isScanning else { return }
         let candidates = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") }

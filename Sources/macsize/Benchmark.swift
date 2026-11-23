@@ -1,5 +1,5 @@
 import Foundation
-import TreeSizeCore
+import MacSizeCore
 
 /// Times the scanner against `du -sk` on the same path and compares totals.
 struct Benchmark {
@@ -36,7 +36,7 @@ struct Benchmark {
         let threads = "\(options.threadCount) thread" + (options.threadCount == 1 ? "" : "s")
         print("Path:      \(args.path)")
         print("Files:     \(SizeFormatter.grouped(ourFiles))")
-        print("treesize:  \(String(format: "%7.3f s", ourBest))  \(SizeFormatter.string(ourBytes, binary: args.binaryUnits))  (\(threads))")
+        print("macsize:  \(String(format: "%7.3f s", ourBest))  \(SizeFormatter.string(ourBytes, binary: args.binaryUnits))  (\(threads))")
         print("du -sk:    \(String(format: "%7.3f s", duBest))  \(SizeFormatter.string(duBytes, binary: args.binaryUnits))")
         if ourBest > 0 {
             print(String(format: "Speedup:   %.2fx", duBest / ourBest))

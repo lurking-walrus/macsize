@@ -2,7 +2,7 @@ import CoreGraphics
 import Darwin
 import Foundation
 import Testing
-@testable import TreeSizeCore
+@testable import MacSizeCore
 
 /// Creates a throwaway directory tree under the system temp directory.
 final class Fixture {
@@ -10,7 +10,7 @@ final class Fixture {
 
     init() throws {
         root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("treesize-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("macsize-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 

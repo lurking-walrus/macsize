@@ -1,5 +1,5 @@
 import Foundation
-import TreeSizeCore
+import MacSizeCore
 
 enum Command: String {
     case scan, largest, types, bench, help, version
@@ -30,15 +30,15 @@ struct Arguments {
     var runs = 1
 
     static let usage = """
-    treesize — fast disk usage analyzer for macOS
+    macsize — fast disk usage analyzer for macOS
 
     USAGE
-      treesize [scan] [PATH] [options]      Show a size-sorted tree (default command)
-      treesize largest [PATH] [options]     List the largest files
-      treesize types [PATH] [options]       Summarize usage by file extension
-      treesize bench [PATH] [options]       Compare scan speed and totals against du(1)
-      treesize help | --help                Show this help
-      treesize version | --version          Show version
+      macsize [scan] [PATH] [options]      Show a size-sorted tree (default command)
+      macsize largest [PATH] [options]     List the largest files
+      macsize types [PATH] [options]       Summarize usage by file extension
+      macsize bench [PATH] [options]       Compare scan speed and totals against du(1)
+      macsize help | --help                Show this help
+      macsize version | --version          Show version
 
     PATH defaults to the current directory.
 
@@ -63,7 +63,7 @@ struct Arguments {
     static func parse(_ raw: [String]) throws -> Arguments {
         var args = Arguments()
         var remaining = raw[...]
-        // `swift run treesize -- args` forwards the separator itself; ignore a leading one.
+        // `swift run macsize -- args` forwards the separator itself; ignore a leading one.
         if remaining.first == "--" { remaining.removeFirst() }
         var positional: [String] = []
 
@@ -108,7 +108,7 @@ struct Arguments {
                 positional.append(contentsOf: remaining)
                 remaining = []
             default:
-                if arg.hasPrefix("-") && arg.count > 1 { throw CLIError("Unknown option: \(arg)\nRun `treesize --help` for usage.") }
+                if arg.hasPrefix("-") && arg.count > 1 { throw CLIError("Unknown option: \(arg)\nRun `macsize --help` for usage.") }
                 positional.append(arg)
             }
         }

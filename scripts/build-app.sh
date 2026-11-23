@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build TreeSize.app from the Swift package.
+# Build MacSize.app from the Swift package.
 #
 # All values are configurable through environment variables:
-#   APP_NAME       Display/bundle name               (default: TreeSize)
-#   BUNDLE_ID      CFBundleIdentifier                (default: com.example.treesize)
+#   APP_NAME       Display/bundle name               (default: MacSize)
+#   BUNDLE_ID      CFBundleIdentifier                (default: com.example.macsize)
 #   VERSION        CFBundleShortVersionString        (default: 0.1.0)
 #   BUILD_NUMBER   CFBundleVersion                   (default: 1)
 #   CONFIGURATION  swift build configuration         (default: release)
@@ -11,12 +11,12 @@
 #   SIGN_IDENTITY  codesign identity; "-" = ad-hoc   (default: -)
 #
 # Example:
-#   BUNDLE_ID=io.github.yourname.treesize SIGN_IDENTITY="Developer ID Application: …" scripts/build-app.sh
+#   BUNDLE_ID=io.github.yourname.macsize SIGN_IDENTITY="Developer ID Application: …" scripts/build-app.sh
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="${APP_NAME:-TreeSize}"
-BUNDLE_ID="${BUNDLE_ID:-com.example.treesize}"
+APP_NAME="${APP_NAME:-MacSize}"
+BUNDLE_ID="${BUNDLE_ID:-com.example.macsize}"
 VERSION="${VERSION:-0.1.0}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 CONFIGURATION="${CONFIGURATION:-release}"
@@ -25,15 +25,15 @@ SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 MIN_MACOS="14.0"
 
 cd "$ROOT_DIR"
-echo "==> Building TreeSizeApp ($CONFIGURATION)"
-swift build -c "$CONFIGURATION" --product TreeSizeApp
+echo "==> Building MacSizeApp ($CONFIGURATION)"
+swift build -c "$CONFIGURATION" --product MacSizeApp
 BIN_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 
 APP_DIR="$OUTPUT_DIR/$APP_NAME.app"
 echo "==> Assembling $APP_DIR"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-cp "$BIN_DIR/TreeSizeApp" "$APP_DIR/Contents/MacOS/$APP_NAME"
+cp "$BIN_DIR/MacSizeApp" "$APP_DIR/Contents/MacOS/$APP_NAME"
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
