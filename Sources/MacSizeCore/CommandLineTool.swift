@@ -2,8 +2,8 @@ import Foundation
 
 /// Product-wide constants shared by the app and the CLI.
 public enum MacSizeInfo {
-    /// Version reported by `macsize --version` and compared by the app.
-    public static let version = "0.1.0"
+    /// Version reported by `macsize --version` and compared by the app (from `BuildInfo`).
+    public static var version: String { BuildInfo.version }
     /// Name of the command-line executable.
     public static let commandName = "macsize"
 }
