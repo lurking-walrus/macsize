@@ -21,9 +21,25 @@ a SwiftUI desktop app and a command-line tool (`macsize`), both built on the sam
 
 ## Quick start: run it on your Mac
 
-There are no prebuilt downloads yet. You build it from source, which takes about a minute.
+### Option A: download the app (recommended)
 
-### 1. Check that you have the requirements
+1. Download the latest **`MacSize-<version>.dmg`** from
+   [Releases](https://github.com/lurking-walrus/treesize-mac/releases/latest).
+2. Open it and drag **MacSize** into **Applications**.
+3. Open MacSize. It's signed and notarized by Apple, so it opens without warnings.
+
+MacSize updates itself: it checks daily, downloads in the background and installs when you
+quit. You can also choose **MacSize › Check for Updates…**. Then continue with
+[step 4](#4-optional-install-the-command-line-tool) and [step 5](#5-grant-full-disk-access-recommended).
+
+### Option B: build from source
+
+Building from source gives you **MacSize Dev**, which is separate from the official app. It
+has its own name and bundle ID (`com.example.macsize.dev`), so it shows up as "MacSize Dev"
+in Full Disk Access, the Dock and Finder. It can sit next to an installed MacSize without
+mixing up their settings or permissions. Dev builds never auto-update.
+
+#### 1. Check that you have the requirements
 
 - **macOS 14 (Sonoma) or later.** Check this under Apple menu › About This Mac.
 - **Xcode 16 or later**, installed from the [App Store](https://apps.apple.com/app/xcode/id497799835).
@@ -42,7 +58,7 @@ There are no prebuilt downloads yet. You build it from source, which takes about
   The Xcode Command Line Tools alone (`xcode-select --install`) are usually enough to build
   the app and CLI. The full Xcode install is the reliable option, and it's needed for `swift test`.
 
-### 2. Get the code
+#### 2. Get the code
 
 ```bash
 git clone https://github.com/lurking-walrus/treesize-mac.git
@@ -52,22 +68,22 @@ git clone https://github.com/lurking-walrus/treesize-mac.git
 cd treesize-mac
 ```
 
-### 3. Build and open the app
+#### 3. Build and open the app
 
 ```bash
 scripts/build-app.sh
 ```
 
 ```bash
-open build/MacSize.app
+open "build/MacSize Dev.app"
 ```
 
 The app opens on a welcome screen. Choose **Home Folder**, a volume, or **Choose Folder…** (⌘O).
 
-To keep the app, drag `build/MacSize.app` into your `Applications` folder, or run:
+To keep it, copy it into your `Applications` folder:
 
 ```bash
-cp -R build/MacSize.app /Applications/
+cp -R "build/MacSize Dev.app" /Applications/
 ```
 
 ### 4. (Optional) Install the command-line tool
@@ -78,7 +94,7 @@ whether `macsize` is installed and where. Click **Install**:
 - **For All Users** links `/usr/local/bin/macsize`. macOS asks for your password.
 - **Just for Me** links `~/.local/bin/macsize`. No password is needed.
 
-The command is a link to the copy inside `MacSize.app`, so it updates whenever the app does.
+The command is a link to the copy inside the app, so it updates whenever the app does.
 The card also offers **Update**, **Repair** (if the app was moved) and **Uninstall**.
 
 **From Terminal:** this installs a standalone copy into `~/.local/bin`, so it doesn't need `sudo`:
@@ -106,15 +122,19 @@ To install system-wide in `/usr/local/bin` instead, run `sudo scripts/install.sh
 macOS protects some locations: Mail, Messages, Safari data, parts of `~/Library`, and other
 users' folders. Without Full Disk Access these show a 🔒 icon and are counted as empty.
 
-1. Open **System Settings › Privacy & Security › Full Disk Access**. The app's status bar
-   has a **Grant Full Disk Access…** link that opens it directly.
-2. Click **+** and add `MacSize.app`. For the CLI, add your terminal app (Terminal, iTerm, …) instead.
-3. Quit and reopen MacSize (or your terminal), then rescan with ⌘R.
+macOS never asks for this permission and never lists an app until you add it. The
+**Full Disk Access** card on MacSize's welcome screen shows whether access is granted and
+walks you through it:
 
-> **Rebuilt the app and access stopped working?** Local builds use an ad-hoc signature that
-> changes on every build, so macOS treats each rebuild as a new app. Remove MacSize from the
-> Full Disk Access list and add it again. To avoid this, sign with your own certificate (see
-> [Build options](#build-options)).
+1. Click **Open Settings**. It goes to **Privacy & Security › Full Disk Access**.
+2. Drag the MacSize icon from the card into the list, or click **+** and choose MacSize from
+   Applications. For the CLI, add your terminal app (Terminal, iTerm, …) instead.
+3. Turn the switch on, then click **Relaunch MacSize** and rescan with ⌘R.
+
+The official app keeps this permission across updates. **MacSize Dev** is listed separately.
+Local builds are ad-hoc signed, so after rebuilding it you may need to remove "MacSize Dev"
+from the list and add it again. To avoid that, sign with your own certificate (see
+[Build options](#build-options)).
 
 ---
 
@@ -207,10 +227,10 @@ particular machine or developer is hardcoded:
 
 | Variable        | Default                | Purpose                                  |
 |-----------------|------------------------|------------------------------------------|
-| `APP_NAME`      | `MacSize`             | Bundle and executable name               |
-| `BUNDLE_ID`     | `com.example.macsize` | `CFBundleIdentifier`; set your own       |
-| `VERSION`       | `0.1.0`                | `CFBundleShortVersionString`             |
-| `BUILD_NUMBER`  | `1`                    | `CFBundleVersion`                        |
+| `APP_NAME`      | `MacSize Dev`          | App, bundle and executable name          |
+| `BUNDLE_ID`     | `com.example.macsize.dev` | `CFBundleIdentifier`; set your own    |
+| `VERSION`       | from git tags          | `CFBundleShortVersionString`             |
+| `BUILD_NUMBER`  | git commit count       | `CFBundleVersion`                        |
 | `CONFIGURATION` | `release`              | `swift build` configuration              |
 | `OUTPUT_DIR`    | `./build`              | Output directory                         |
 | `SIGN_IDENTITY` | `-` (ad-hoc)           | `codesign` identity                      |
@@ -225,8 +245,12 @@ security find-identity -v -p codesigning
 Then build with your identity:
 
 ```bash
-BUNDLE_ID=io.github.yourname.macsize SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" scripts/build-app.sh
+SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" scripts/build-app.sh
 ```
+
+The defaults deliberately differ from the official release (`MacSize`, set by the release
+workflow from the `BUNDLE_ID` repository variable), so a dev build never shares settings,
+Full Disk Access or update state with an installed release.
 
 `scripts/install.sh` installs the CLI and, optionally, the app:
 
@@ -242,18 +266,22 @@ PREFIX="$HOME/.local" APP_DEST="$HOME/Applications" scripts/install.sh
 ## Uninstall
 
 ```bash
-rm -rf /Applications/MacSize.app ~/Applications/MacSize.app
+rm -rf /Applications/MacSize.app "/Applications/MacSize Dev.app" ~/Applications/MacSize.app "$HOME/Applications/MacSize Dev.app"
 ```
 
 ```bash
 rm -f ~/.local/bin/macsize /usr/local/bin/macsize
 ```
 
+Remove saved settings for the official app and for dev builds:
+
 ```bash
-defaults delete com.example.macsize
+defaults delete io.github.lurking-walrus.macsize; defaults delete com.example.macsize.dev
 ```
 
 If you built with a custom `BUNDLE_ID`, use that ID in the `defaults delete` command instead.
+To also remove an app from the Full Disk Access list, select it in **System Settings ›
+Privacy & Security › Full Disk Access** and click **–**.
 
 ## Troubleshooting
 
