@@ -2,8 +2,8 @@
 # Build MacSize.app from the Swift package.
 #
 # All values are configurable through environment variables:
-#   APP_NAME       Display/bundle name               (default: MacSize)
-#   BUNDLE_ID      CFBundleIdentifier                (default: com.example.macsize)
+#   APP_NAME       Display/bundle name               (default: "MacSize Dev")
+#   BUNDLE_ID      CFBundleIdentifier                (default: com.example.macsize.dev)
 #   VERSION        CFBundleShortVersionString        (default: BuildInfo.version, else `git describe`)
 #   BUILD_NUMBER   CFBundleVersion                   (default: BuildInfo.build, else git commit count)
 #   CONFIGURATION  swift build configuration         (default: release)
@@ -33,8 +33,11 @@ build_info_value() {
     sed -n "s/^[[:space:]]*public static let $1 = \"\(.*\)\"$/\1/p" "$BUILD_INFO" | head -n 1
 }
 
-APP_NAME="${APP_NAME:-MacSize}"
-BUNDLE_ID="${BUNDLE_ID:-com.example.macsize}"
+# Local builds default to a distinct "MacSize Dev" identity so they never collide with an
+# installed official release (Full Disk Access, preferences, Sparkle state). The release
+# workflow sets APP_NAME=MacSize and BUNDLE_ID from the repository variable.
+APP_NAME="${APP_NAME:-MacSize Dev}"
+BUNDLE_ID="${BUNDLE_ID:-com.example.macsize.dev}"
 if [[ -z "${VERSION:-}" ]]; then
     VERSION="$(build_info_value version)"
     if [[ -z "$VERSION" || "$VERSION" == "0.0.0-dev" ]]; then

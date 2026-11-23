@@ -26,7 +26,7 @@ echo "==> Installed $PREFIX/bin/macsize"
 
 if [[ -n "$APP_DEST" ]]; then
     OUTPUT_DIR="$ROOT_DIR/build" "$ROOT_DIR/scripts/build-app.sh"
-    APP_NAME="${APP_NAME:-MacSize}"
+    APP_NAME="${APP_NAME:-MacSize Dev}"
     mkdir -p "$APP_DEST"
     rm -rf "$APP_DEST/$APP_NAME.app"
     cp -R "$ROOT_DIR/build/$APP_NAME.app" "$APP_DEST/"
