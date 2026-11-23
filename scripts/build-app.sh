@@ -93,6 +93,9 @@ cp "$BIN_DIR/MacSizeApp" "$CONTENTS/MacOS/$APP_NAME"
 # The CLI ships inside the app so the app can offer to install it (as a symlink).
 # It lives in Helpers/ because MacOS/ is case-insensitive and would clash with the app binary.
 cp "$BIN_DIR/macsize" "$CONTENTS/Helpers/macsize"
+if [[ -f "$ROOT_DIR/Resources/AppIcon/AppIcon.icns" ]]; then
+    cp "$ROOT_DIR/Resources/AppIcon/AppIcon.icns" "$CONTENTS/Resources/AppIcon.icns"
+fi
 
 echo "==> Embedding Sparkle.framework"
 SPARKLE="$CONTENTS/Frameworks/Sparkle.framework"
@@ -138,6 +141,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>CFBundleExecutable</key><string>$(xml_escape "$APP_NAME")</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleIdentifier</key><string>$(xml_escape "$BUNDLE_ID")</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleName</key><string>$(xml_escape "$APP_NAME")</string>
