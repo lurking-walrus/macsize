@@ -237,3 +237,68 @@ final class Fixture {
         #expect(Treemap.squarify([1], in: .zero) == [.zero])
     }
 }
+
+@Suite struct CommandLineToolTests {
+    /// Writes a fake `macsize` script that prints the given version.
+    private func fakeTool(in directory: String, version: String) throws -> String {
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        let path = directory + "/macsize"
+        try "#!/bin/sh\necho \"macsize \(version)\"\n".write(toFile: path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return path
+    }
+
+    @Test func parsesVersionOutput() {
+        #expect(CommandLineToolManager.parseVersion("macsize 1.2.3\n") == "1.2.3")
+        #expect(CommandLineToolManager.parseVersion("something else") == nil)
+    }
+
+    @Test func installsSymlinkAndDetectsIt() throws {
+        let fx = try Fixture()
+        let source = try fakeTool(in: fx.root.path + "/App.app/Contents/Helpers", version: "9.9.9")
+        let bin = fx.root.path + "/bin"
+        let manager = CommandLineToolManager(pathDirectories: [bin])
+
+        #expect(manager.findInstalls(extraDirectories: []).isEmpty)
+        try manager.installSymlink(source: source, in: bin)
+
+        let installs = manager.findInstalls(extraDirectories: [])
+        let install = try #require(installs.first)
+        #expect(install.isSymlink)
+        #expect(!install.isBroken)
+        #expect(install.isOnPath)
+        #expect(install.version == "9.9.9")
+
+        // Re-installing replaces the link rather than failing.
+        try manager.installSymlink(source: source, in: bin)
+        #expect(manager.findInstalls(extraDirectories: []).count == 1)
+    }
+
+    @Test func detectsBrokenLinkAndOffPathInstalls() throws {
+        let fx = try Fixture()
+        let source = try fakeTool(in: fx.root.path + "/gone", version: "1.0.0")
+        let elsewhere = fx.root.path + "/elsewhere"
+        let manager = CommandLineToolManager(pathDirectories: [fx.root.path + "/onpath"])
+        try manager.installSymlink(source: source, in: elsewhere)
+        try FileManager.default.removeItem(atPath: source)
+
+        let install = try #require(manager.findInstalls(extraDirectories: [elsewhere]).first)
+        #expect(install.isBroken)
+        #expect(!install.isOnPath)
+        #expect(install.version == nil)
+
+        try manager.uninstall(install)
+        #expect(manager.findInstalls(extraDirectories: [elsewhere]).isEmpty)
+    }
+
+    @Test func refusesToUninstallUnrelatedFile() throws {
+        let fx = try Fixture()
+        let bin = fx.root.path + "/bin"
+        try FileManager.default.createDirectory(atPath: bin, withIntermediateDirectories: true)
+        try "not a tool".write(toFile: bin + "/macsize", atomically: true, encoding: .utf8)
+        let manager = CommandLineToolManager(pathDirectories: [bin])
+        let install = try #require(manager.findInstalls(extraDirectories: []).first)
+        #expect(throws: (any Error).self) { try manager.uninstall(install) }
+        #expect(FileManager.default.fileExists(atPath: bin + "/macsize"))
+    }
+}
