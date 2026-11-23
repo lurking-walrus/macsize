@@ -39,7 +39,7 @@ final class UpdateNotifier: @unchecked Sendable {
 
     static func start(for args: Arguments, environment: [String: String] = ProcessInfo.processInfo.environment) -> UpdateNotifier? {
         switch args.command {
-        case .help, .version, .update: return nil
+        case .help, .version, .update, .cache: return nil
         case .scan, .largest, .types, .bench: break
         }
         guard !args.json,

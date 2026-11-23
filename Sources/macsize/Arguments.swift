@@ -2,7 +2,13 @@ import Foundation
 import MacSizeCore
 
 enum Command: String {
-    case scan, largest, types, bench, update, help, version
+    case scan, largest, types, bench, update, cache, help, version
+}
+
+enum CacheAction: Equatable {
+    case list
+    case clear
+    case remove(path: String)
 }
 
 struct CLIError: Error, CustomStringConvertible {
@@ -29,6 +35,14 @@ struct Arguments {
     var systemExclusions = true
     var runs = 1
     var checkOnly = false
+    var verbose = false
+    /// Read and write the scan cache (`--no-cache` turns both off).
+    var useCache = true
+    /// Ignore the cached tree but save the new one (`--refresh` / `--full`).
+    var forceFull = false
+    /// `--cache-dir`; nil means `MACSIZE_CACHE_DIR` or the default location.
+    var cacheDirectory: String?
+    var cacheAction: CacheAction = .list
 
     static let usage = """
     macsize — fast disk usage analyzer for macOS
@@ -39,10 +53,17 @@ struct Arguments {
       macsize types [PATH] [options]       Summarize usage by file extension
       macsize bench [PATH] [options]       Compare scan speed and totals against du(1)
       macsize update [--check]             Update macsize to the latest release
+      macsize cache list [--json]          List cached scans
+      macsize cache clear                  Delete all cached scans
+      macsize cache remove PATH            Delete the cached scan of PATH
       macsize help | --help                Show this help
       macsize version | --version          Show version
 
     PATH defaults to the current directory.
+
+    `scan`, `largest` and `types` cache each scan. The next run for the same PATH and
+    options re-reads only the folders that changed since (from the FSEvents history), so
+    results always match the disk. `bench` never uses the cache.
 
     OPTIONS
       -d, --depth N|all       Levels of the tree to print (default 2)
@@ -54,6 +75,7 @@ struct Arguments {
           --json              Emit JSON instead of text
           --no-bars           Don't draw percentage bars
       -q, --quiet             Don't show progress on stderr
+          --verbose           Report cache use on stderr
       -j, --threads N         Worker threads (default \(ScanOptions.defaultThreadCount))
       -x, --one-file-system   Don't cross into other volumes
       -e, --exclude PATH      Don't descend into PATH (repeatable)
@@ -61,10 +83,14 @@ struct Arguments {
                               Also scan \(ScanOptions.systemExcludedPaths.joined(separator: ", "))
           --runs N            Repetitions for `bench` (default 1; best time reported)
           --check             With `update`: only report whether a newer version exists
+          --no-cache          Don't read or write the scan cache
+          --refresh, --full   Rescan everything, ignoring the cached tree (still saves it)
+          --cache-dir PATH    Cache location (default ~/Library/Caches/MacSize/Scans)
 
     ENVIRONMENT
       MACSIZE_NO_UPDATE_NOTIFIER=1
                               Don't check for new versions in the background
+      MACSIZE_CACHE_DIR=PATH  Cache location, overridden by --cache-dir
     """
 
     static func parse(_ raw: [String]) throws -> Arguments {
@@ -112,6 +138,13 @@ struct Arguments {
             case "--no-system-excludes": args.systemExclusions = false
             case "--runs": args.runs = max(1, try integer(for: arg) ?? 1)
             case "--check": args.checkOnly = true
+            case "--verbose": args.verbose = true
+            case "--no-cache": args.useCache = false
+            case "--refresh", "--full": args.forceFull = true
+            case "--cache-dir":
+                let path = try value(for: arg)
+                guard !path.isEmpty else { throw CLIError("--cache-dir needs a non-empty PATH") }
+                args.cacheDirectory = path
             case "--":
                 positional.append(contentsOf: remaining)
                 remaining = []
@@ -126,6 +159,20 @@ struct Arguments {
         }
         if args.command == .update && !positional.isEmpty {
             throw CLIError("`macsize update` doesn't take a PATH")
+        }
+        if args.command == .cache {
+            switch positional.first ?? "list" {
+            case "list", "ls": args.cacheAction = .list
+            case "clear": args.cacheAction = .clear
+            case "remove", "rm":
+                guard positional.count == 2 else { throw CLIError("Usage: macsize cache remove PATH") }
+                args.cacheAction = .remove(path: positional[1])
+                return args
+            default:
+                throw CLIError("Unknown cache action: \(positional[0]). Expected list, clear or remove PATH.")
+            }
+            if positional.count > 1 { throw CLIError("`macsize cache \(positional[0])` doesn't take a PATH") }
+            return args
         }
         if positional.count > 1 { throw CLIError("Expected a single PATH, got: \(positional.joined(separator: " "))") }
         if let path = positional.first { args.path = path }

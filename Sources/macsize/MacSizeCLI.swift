@@ -28,7 +28,7 @@ struct MacSizeCLI {
         case .version:
             print("\(MacSizeInfo.commandName) \(MacSizeInfo.version)")
         case .scan:
-            let root = try scan(args)
+            let root = try scan(args).root
             if args.json {
                 let report = NodeReport(node: root, maxDepth: args.depth, limit: args.top, minimumSize: args.minimumSize, metric: args.metric)
                 FileHandle.standardOutput.write(try report.jsonData())
@@ -38,7 +38,7 @@ struct MacSizeCLI {
                 printSummary(root, args: args)
             }
         case .largest:
-            let root = try scan(args)
+            let root = try scan(args).root
             let files = root.largestFiles(count: args.count, metric: args.metric)
                 .filter { $0.size(args.metric) >= args.minimumSize }
             if args.json {
@@ -51,7 +51,7 @@ struct MacSizeCLI {
                 }
             }
         case .types:
-            let root = try scan(args)
+            let root = try scan(args).root
             let stats = Array(root.fileTypeSummary(metric: args.metric).prefix(args.count))
             if args.json {
                 FileHandle.standardOutput.write(try encoder().encode(stats))
@@ -72,15 +72,72 @@ struct MacSizeCLI {
             try Benchmark(args: args).run()
         case .update:
             try UpdateCommand.run(checkOnly: args.checkOnly)
+        case .cache:
+            try CacheCommand(args: args).run()
         }
     }
 
-    static func scan(_ args: Arguments) throws -> FileNode {
-        let scanner = DiskScanner(options: args.scanOptions)
-        let reporter = (args.quiet || isatty(STDERR_FILENO) == 0) ? nil : ProgressReporter(progress: scanner.progress)
-        reporter?.start()
+    /// Scans `args.path`, reusing and updating the scan cache unless `--no-cache`.
+    static func scan(_ args: Arguments) throws -> (root: FileNode, outcome: CachedScan.Outcome) {
+        let showProgress = !args.quiet && isatty(STDERR_FILENO) != 0
+        var reporter: ProgressReporter?
         defer { reporter?.stop() }
-        return try scanner.scanSynchronously(path: args.path)
+
+        let location = CacheLocation(args: args)
+        let (root, outcome) = try CachedScan.run(
+            path: args.path,
+            options: args.scanOptions,
+            cache: ScanCache(directory: location.directory),
+            useCache: args.useCache,
+            forceFull: args.forceFull,
+            metric: args.metric,
+            cacheDirectoryIsExplicit: location.isExplicitFlag,
+            onPhase: { phase in
+                guard showProgress else { return }
+                reporter?.stop()
+                switch phase {
+                case let .refreshing(cachedAt, progress):
+                    reporter = ProgressReporter(progress: progress, label: "Updating from cache (scanned \(RelativeTime.short(since: cachedAt)))…")
+                case let .scanning(progress):
+                    reporter = ProgressReporter(progress: progress, label: "Scanning…")
+                }
+                reporter?.start()
+            }
+        )
+        reporter?.stop()
+        reporter = nil
+
+        if let error = outcome.saveError {
+            printError("warning: couldn't save the scan cache in \(location.directory.path): \(error)")
+        }
+        if args.verbose {
+            printNote(cacheReport(outcome, location: location))
+        }
+        return (root, outcome)
+    }
+
+    /// One line describing how the cache was used, e.g. "refreshed from cache: 3 folders rescanned in 0.04 s".
+    static func cacheReport(_ outcome: CachedScan.Outcome, location: CacheLocation) -> String {
+        var text: String
+        switch outcome.source {
+        case .uncached:
+            text = String(format: "scanned without cache in %.2f s", outcome.duration)
+        case .fullScan:
+            text = String(format: "full scan in %.2f s (no usable cached scan)", outcome.duration)
+        case .refreshed:
+            if outcome.didFullRescan {
+                text = String(format: "cached scan couldn't be updated incrementally; full rescan in %.2f s", outcome.duration)
+            } else {
+                let folders = SizeFormatter.grouped(outcome.directoriesRescanned) + (outcome.directoriesRescanned == 1 ? " folder" : " folders")
+                text = String(format: "refreshed from cache: %@ rescanned in %.2f s", folders, outcome.duration)
+            }
+        }
+        if outcome.saved {
+            text += "; saved to \(location.directory.path)"
+        } else if outcome.saveSkipped == .runningAsRoot {
+            text += "; not saved (running as root; pass --cache-dir to save anyway)"
+        }
+        return text
     }
 
     static func printSummary(_ root: FileNode, args: Arguments) {
@@ -123,6 +180,11 @@ func pad(_ text: String, _ width: Int) -> String {
 }
 
 func printError(_ message: String) {
+    FileHandle.standardError.write(Data(("macsize: " + message + "\n").utf8))
+}
+
+/// Informational line on stderr (keeps stdout clean for `--json`).
+func printNote(_ message: String) {
     FileHandle.standardError.write(Data(("macsize: " + message + "\n").utf8))
 }
 
@@ -178,11 +240,14 @@ struct TreePrinter {
 /// Prints a live status line on stderr while a scan runs.
 final class ProgressReporter: @unchecked Sendable {
     private let progress: ScanProgress
+    private let label: String
     private let timer: DispatchSourceTimer
     private let startedAt = Date()
+    private var stopped = false
 
-    init(progress: ScanProgress) {
+    init(progress: ScanProgress, label: String = "Scanning…") {
         self.progress = progress
+        self.label = label
         timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
     }
 
@@ -193,6 +258,8 @@ final class ProgressReporter: @unchecked Sendable {
     }
 
     func stop() {
+        guard !stopped else { return }
+        stopped = true
         timer.cancel()
         FileHandle.standardError.write(Data("\r\u{1B}[2K".utf8))
     }
@@ -201,7 +268,8 @@ final class ProgressReporter: @unchecked Sendable {
         let snapshot = progress.snapshot()
         let elapsed = Date().timeIntervalSince(startedAt)
         let text = String(
-            format: "\r\u{1B}[2KScanning… %@ files, %@ folders, %@ (%.1fs)",
+            format: "\r\u{1B}[2K%@ %@ files, %@ folders, %@ (%.1fs)",
+            label,
             SizeFormatter.grouped(snapshot.files),
             SizeFormatter.grouped(snapshot.directories),
             SizeFormatter.string(snapshot.bytes),
