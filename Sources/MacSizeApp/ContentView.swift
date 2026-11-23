@@ -32,10 +32,10 @@ struct ContentView: View {
             isPresented: Binding(get: { !model.pendingTrash.isEmpty }, set: { if !$0 { model.pendingTrash = [] } }),
             titleVisibility: .visible
         ) {
-            Button("Move to Trash", role: .destructive) { model.confirmTrash() }
+            Button(trashWarnings.isEmpty ? "Move to Trash" : "Move to Trash Anyway", role: .destructive) { model.confirmTrash() }
             Button("Cancel", role: .cancel) { model.pendingTrash = [] }
         } message: {
-            Text(model.pendingTrash.map(\.path).joined(separator: "\n"))
+            Text(trashMessage)
         }
     }
 
@@ -43,7 +43,20 @@ struct ContentView: View {
         let items = model.pendingTrash
         let total = items.reduce(Int64(0)) { $0 + $1.size(model.metric) }
         let what = items.count == 1 ? "“\(items[0].name)”" : "\(items.count) items"
-        return "Move \(what) (\(SizeFormatter.string(total))) to the Trash?"
+        let prefix = trashWarnings.isEmpty ? "" : "Careful: "
+        return "\(prefix)Move \(what) (\(SizeFormatter.string(total))) to the Trash?"
+    }
+
+    private var trashWarnings: [SensitivePaths.Warning] {
+        SensitivePaths.warnings(for: model.pendingTrash.map(\.path))
+    }
+
+    private var trashMessage: String {
+        let paths = model.pendingTrash.map(\.path).joined(separator: "\n")
+        let warnings = trashWarnings
+        guard !warnings.isEmpty else { return paths }
+        let notes = warnings.map { "• \(($0.path as NSString).lastPathComponent): \($0.reason)" }.joined(separator: "\n")
+        return "This includes important items:\n\(notes)\n\nYou can restore them from the Trash until it is emptied.\n\n\(paths)"
     }
 
     @ToolbarContentBuilder
