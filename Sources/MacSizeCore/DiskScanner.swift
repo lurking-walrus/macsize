@@ -131,10 +131,17 @@ public final class ScanProgress: @unchecked Sendable {
 /// are aggregated in a single pass once all workers are done.
 public final class DiskScanner: @unchecked Sendable {
     public let options: ScanOptions
-    public let progress = ScanProgress()
+    public let progress: ScanProgress
 
     public init(options: ScanOptions = ScanOptions()) {
         self.options = options
+        self.progress = ScanProgress()
+    }
+
+    /// Scanner that reports into an existing progress object (used by `IncrementalScanner`).
+    init(options: ScanOptions, progress: ScanProgress) {
+        self.options = options
+        self.progress = progress
     }
 
     public func cancel() { progress.cancel() }
@@ -187,12 +194,7 @@ public final class DiskScanner: @unchecked Sendable {
             options: options,
             progress: progress
         )
-        context.queue.push([WorkItem(node: root, path: rootPath)])
-
-        let threads = options.threadCount
-        DispatchQueue.concurrentPerform(iterations: threads) { _ in
-            context.runWorker()
-        }
+        context.scanSubtrees([WorkItem(node: root, path: rootPath)], threadCount: options.threadCount)
 
         if progress.isCancelled { throw ScanError.cancelled }
         if root.errorCode != 0 && root.children.isEmpty {
@@ -292,6 +294,18 @@ final class ScanContext: @unchecked Sendable {
         return seenHardLinks.insert(HardLinkKey(device: device, inode: inode)).inserted
     }
 
+    /// Scans each item's directory into a complete subtree below its (fresh, childless)
+    /// node, in parallel on `threadCount` workers. Blocks until done or cancelled.
+    /// Totals are not aggregated: call `finalize()` on each item's node afterwards.
+    /// A context's queue is single-use, so call this at most once per context.
+    func scanSubtrees(_ items: [WorkItem], threadCount: Int) {
+        guard !items.isEmpty else { return }
+        queue.push(items)
+        DispatchQueue.concurrentPerform(iterations: max(1, threadCount)) { _ in
+            runWorker()
+        }
+    }
+
     func runWorker() {
         let reader = BulkDirectoryReader()
         while let item = queue.pop() {
@@ -300,13 +314,16 @@ final class ScanContext: @unchecked Sendable {
                 queue.finish()
                 break
             }
-            let subdirectories = scanDirectory(item, reader: reader)
+            let subdirectories = listDirectory(item, reader: reader)
             queue.push(subdirectories)
             queue.finish()
         }
     }
 
-    private func scanDirectory(_ item: WorkItem, reader: BulkDirectoryReader) -> [WorkItem] {
+    /// Reads the direct entries of `item.path` into fresh children of `item.node`
+    /// (applying exclusions, stay-on-volume and hard-link dedupe) and returns the
+    /// subdirectories that still need scanning.
+    func listDirectory(_ item: WorkItem, reader: BulkDirectoryReader) -> [WorkItem] {
         let directory = item.node
         let fd = open(item.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else {

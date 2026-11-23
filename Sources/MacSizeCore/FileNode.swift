@@ -173,6 +173,57 @@ public final class FileNode: Identifiable, @unchecked Sendable {
         }
     }
 
+    /// Direct child with the given name (linear search; read-only).
+    func child(named name: String) -> FileNode? {
+        children.first { $0.name == name }
+    }
+
+    /// The node at absolute `path` inside this tree (`self` must be a root, whose
+    /// `name` is its full path), or nil. Read-only.
+    func descendant(atPath path: String) -> FileNode? {
+        if path == name { return self }
+        let prefix = name.hasSuffix("/") ? name : name + "/"
+        guard path.hasPrefix(prefix) else { return nil }
+        var node = self
+        for component in path.dropFirst(prefix.count).split(separator: "/") {
+            guard let next = node.child(named: String(component)) else { return nil }
+            node = next
+        }
+        return node
+    }
+
+    /// Recompute this directory's totals from its direct children (which must already
+    /// be correct) and re-sort them by `metric`. The modification time becomes the
+    /// newest of `ownModificationTime` (or, if nil, the current aggregate) and the
+    /// children's.
+    func reaggregate(ownModificationTime: TimeInterval?, metric: SizeMetric) {
+        guard kind == .directory else { return }
+        var allocated: Int64 = 0
+        var logical: Int64 = 0
+        var files = 0
+        var dirs = 0
+        var cloudSize: Int64 = 0
+        var cloudCount = 0
+        var newest = ownModificationTime ?? modificationTime
+        for child in children {
+            allocated += child.allocatedSize
+            logical += child.logicalSize
+            files += child.fileCount
+            if child.kind == .directory { dirs += 1 + child.directoryCount }
+            cloudSize += child.cloudOnlySize
+            cloudCount += child.cloudOnlyCount
+            newest = max(newest, child.modificationTime)
+        }
+        allocatedSize = allocated
+        logicalSize = logical
+        fileCount = files
+        directoryCount = dirs
+        modificationTime = newest
+        cloudOnlySize = cloudSize
+        cloudOnlyCount = cloudCount + (isCloudOnly ? 1 : 0)
+        children.sort { $0.size(metric) > $1.size(metric) }
+    }
+
     /// Compute aggregate totals bottom-up and sort children largest first.
     func finalize() {
         // Iterative post-order traversal so pathological depths can't blow the stack.
