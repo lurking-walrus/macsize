@@ -299,4 +299,6 @@ JSON export and treemap geometry.
 
 ## License
 
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
 MIT. See [LICENSE](LICENSE).
