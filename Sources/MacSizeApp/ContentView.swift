@@ -87,18 +87,47 @@ struct ContentView: View {
 struct ResultsView: View {
     @Environment(ScanModel.self) private var model
     let root: FileNode
+    /// Width of the file list. Stored (not view state) so it survives rescans, which
+    /// tear this view down while scanning, and relaunches.
+    @AppStorage("fileListWidth") private var listWidth: Double = 520
+    @State private var dragStartWidth: Double?
+
+    private static let minList: Double = 360
+    private static let minMap: Double = 320
 
     var body: some View {
         VStack(spacing: 0) {
-            HSplitView {
-                OutlineTableView(root: root)
-                    .frame(minWidth: 360, idealWidth: 520)
-                VStack(spacing: 0) {
-                    BreadcrumbBar()
+            GeometryReader { geo in
+                let maxList = max(Self.minList, geo.size.width - Self.minMap)
+                let width = min(max(listWidth, Self.minList), maxList)
+                HStack(spacing: 0) {
+                    OutlineTableView(root: root)
+                        .frame(width: width)
                     Divider()
-                    TreemapView(focus: model.focus ?? root)
+                        .overlay(
+                            Color.clear
+                                .frame(width: 9)
+                                .contentShape(Rectangle())
+                                .onHover { inside in
+                                    if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                                }
+                                .gesture(
+                                    DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                                        .onChanged { drag in
+                                            let start = dragStartWidth ?? width
+                                            dragStartWidth = start
+                                            listWidth = min(max(start + drag.translation.width, Self.minList), maxList)
+                                        }
+                                        .onEnded { _ in dragStartWidth = nil }
+                                )
+                        )
+                    VStack(spacing: 0) {
+                        BreadcrumbBar()
+                        Divider()
+                        TreemapView(focus: model.focus ?? root)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(minWidth: 320)
             }
             Divider()
             StatusBar(root: root)

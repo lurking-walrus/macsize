@@ -4,6 +4,13 @@ All notable changes to MacSize are documented here. Versions follow
 [Semantic Versioning](https://semver.org/), and each version is a
 [GitHub Release](https://github.com/lurking-walrus/treesize-mac/releases).
 
+## 0.1.4
+
+- **Layout sticks after a rescan**: the divider between the file list and the
+  treemap, and the file list's column widths, no longer reset to their defaults
+  when results are refreshed. The divider position is also remembered across
+  launches.
+
 ## 0.1.3
 
 - **Smart caching**: scans are saved, so reopening a folder shows results

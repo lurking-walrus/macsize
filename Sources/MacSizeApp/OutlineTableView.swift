@@ -6,6 +6,8 @@ struct OutlineTableView: View {
     @Environment(ScanModel.self) private var model
     @AppStorage(CloudDisplay.showCloudOnlyKey) private var showCloudOnly = true
     @State private var cloud = CloudActions.shared
+    /// Column widths/order the user set; persisted so rescans (which rebuild the table) keep them.
+    @SceneStorage("outlineColumns") private var columns = TableColumnCustomization<FileNode>()
     let root: FileNode
 
     var body: some View {
@@ -13,7 +15,8 @@ struct OutlineTableView: View {
         Table(
             showCloudOnly ? root.children : root.children.filter { !$0.isCloudOnly },
             children: \.[outlineChildren: showCloudOnly],
-            selection: $model.selection
+            selection: $model.selection,
+            columnCustomization: $columns
         ) {
             TableColumn("Name") { node in
                 HStack(spacing: 6) {
@@ -46,6 +49,7 @@ struct OutlineTableView: View {
                 .help(CloudDisplay.folderSummary(node) ?? "")
             }
             .width(min: 160, ideal: 260)
+            .customizationID("name")
 
             TableColumn("Size") { node in
                 Text(model.sizeText(node))
@@ -55,11 +59,13 @@ struct OutlineTableView: View {
                     .help(node.isCloudOnly ? (CloudDisplay.folderSummary(node) ?? "") : "")
             }
             .width(min: 70, ideal: 80)
+            .customizationID("size")
 
             TableColumn("% of Parent") { node in
                 PercentBar(fraction: model.fractionOfParent(node))
             }
             .width(min: 90, ideal: 120)
+            .customizationID("percent")
 
             TableColumn("Files") { node in
                 Text(node.isDirectory ? SizeFormatter.grouped(node.fileCount) : "")
@@ -68,12 +74,14 @@ struct OutlineTableView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .width(min: 50, ideal: 70)
+            .customizationID("files")
 
             TableColumn("Modified") { node in
                 Text(Date(timeIntervalSince1970: node.modificationTime), format: .dateTime.year().month().day())
                     .foregroundStyle(.secondary)
             }
             .width(min: 70, ideal: 90)
+            .customizationID("modified")
         }
         // Rebuild rows after sorting changes, items are trashed or downloads removed,
         // or cloud-only items are shown/hidden.
