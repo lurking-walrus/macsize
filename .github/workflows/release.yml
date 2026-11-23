@@ -1,11 +1,15 @@
 # Signed, notarized release + Sparkle appcast + CLI update manifest.
-# Triggered by pushing a tag like v1.2.3 (or v1.3.0-beta.1 for a prerelease).
+# Triggered by pushing a tag like v1.2.3 (or v1.3.0-beta.1 for a prerelease), or by
+# auto-release.yml dispatching this workflow on such a tag (`gh workflow run --ref vX.Y.Z`).
 # One-time setup: scripts/setup-release-secrets.sh, see docs/RELEASING.md.
 name: Release
 
 on:
   push:
     tags: ['v*']
+  # Used by auto-release.yml. Must be run on a tag ref; the release environment only
+  # allows v* tags, so the signing secrets are never exposed to branch runs.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -27,6 +31,12 @@ jobs:
       OUTPUT_DIR: ${{ github.workspace }}/build
       DIST_DIR: ${{ github.workspace }}/dist
     steps:
+      - name: Require a tag ref
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::Run this workflow on a vX.Y.Z tag (got ${GITHUB_REF})."
+          exit 1
+
       - name: Check release configuration
         env:
           MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
