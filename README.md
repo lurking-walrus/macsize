@@ -70,7 +70,16 @@ cp -R build/MacSize.app /Applications/
 
 ### 4. (Optional) Install the command-line tool
 
-This installs `macsize` into `~/.local/bin`, so it doesn't need `sudo`:
+**From the app (easiest):** the welcome screen has a **Command-Line Tool** card that shows
+whether `macsize` is installed and where. Click **Install**:
+
+- **For All Users** links `/usr/local/bin/macsize`. macOS asks for your password.
+- **Just for Me** links `~/.local/bin/macsize`. No password is needed.
+
+The command is a link to the copy inside `MacSize.app`, so it updates whenever the app does.
+The card also offers **Update**, **Repair** (if the app was moved) and **Uninstall**.
+
+**From Terminal:** this installs a standalone copy into `~/.local/bin`, so it doesn't need `sudo`:
 
 ```bash
 PREFIX="$HOME/.local" scripts/install.sh

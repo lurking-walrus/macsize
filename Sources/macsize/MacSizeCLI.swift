@@ -2,7 +2,6 @@ import Darwin
 import Foundation
 import MacSizeCore
 
-let version = "0.1.0"
 
 @main
 struct MacSizeCLI {
@@ -24,7 +23,7 @@ struct MacSizeCLI {
         case .help:
             print(Arguments.usage)
         case .version:
-            print("macsize \(version)")
+            print("\(MacSizeInfo.commandName) \(MacSizeInfo.version)")
         case .scan:
             let root = try scan(args)
             if args.json {

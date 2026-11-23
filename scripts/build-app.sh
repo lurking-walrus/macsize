@@ -27,13 +27,18 @@ MIN_MACOS="14.0"
 cd "$ROOT_DIR"
 echo "==> Building MacSizeApp ($CONFIGURATION)"
 swift build -c "$CONFIGURATION" --product MacSizeApp
+echo "==> Building bundled macsize CLI ($CONFIGURATION)"
+swift build -c "$CONFIGURATION" --product macsize
 BIN_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 
 APP_DIR="$OUTPUT_DIR/$APP_NAME.app"
 echo "==> Assembling $APP_DIR"
 rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$APP_DIR/Contents/Helpers"
 cp "$BIN_DIR/MacSizeApp" "$APP_DIR/Contents/MacOS/$APP_NAME"
+# The CLI ships inside the app so the app can offer to install it (as a symlink).
+# It lives in Helpers/ because MacOS/ is case-insensitive and would clash with the app binary.
+cp "$BIN_DIR/macsize" "$APP_DIR/Contents/Helpers/macsize"
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -59,6 +64,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "==> Signing (identity: $SIGN_IDENTITY)"
+# Sign the nested helper first, then the bundle.
+codesign --force --sign "$SIGN_IDENTITY" --options runtime --timestamp=none "$APP_DIR/Contents/Helpers/macsize" >/dev/null
 codesign --force --sign "$SIGN_IDENTITY" --options runtime --timestamp=none "$APP_DIR" >/dev/null
 
 echo "==> Done: $APP_DIR"

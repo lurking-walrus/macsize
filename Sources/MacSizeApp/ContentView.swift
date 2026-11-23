@@ -197,6 +197,9 @@ struct WelcomeView: View {
                 .foregroundStyle(.secondary)
             Button("Open Full Disk Access Settings…") { model.openFullDiskAccessSettings() }
                 .buttonStyle(.link)
+
+            CommandLineToolCard()
+                .padding(.top, 8)
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
