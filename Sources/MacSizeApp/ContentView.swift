@@ -192,11 +192,8 @@ struct WelcomeView: View {
                 .frame(width: 320)
             }
 
-            Text("For complete results, grant Full Disk Access in System Settings › Privacy & Security.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            Button("Open Full Disk Access Settings…") { model.openFullDiskAccessSettings() }
-                .buttonStyle(.link)
+            FullDiskAccessCard()
+                .padding(.top, 8)
 
             CommandLineToolCard()
                 .padding(.top, 8)
