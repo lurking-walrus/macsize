@@ -4,6 +4,16 @@ All notable changes to MacSize are documented here. Versions follow
 [Semantic Versioning](https://semver.org/), and each version is a
 [GitHub Release](https://github.com/lurking-walrus/treesize-mac/releases).
 
+## 0.1.5
+
+- **Extra warning for sensitive items**: moving important user data or system
+  locations to the Trash (Keychains, iCloud Drive, Mail, Messages, `~/.ssh`,
+  Documents, Desktop, Application Support, installed apps, media libraries and
+  similar) now shows a "Careful" confirmation that explains why. You can still
+  go ahead with **Move to Trash Anyway**; items stay recoverable from the Trash.
+- **CLI**: `macsize` and `macsize largest` mark those same items with ⚠ and a
+  short reason in their text output.
+
 ## 0.1.4
 
 - **Layout sticks after a rescan**: the divider between the file list and the

@@ -49,7 +49,8 @@ struct MacSizeCLI {
                 print()
             } else {
                 for file in files {
-                    print(pad(format(file.size(args.metric), args), 10) + "  " + file.path)
+                    let warning = SensitivePaths.warning(for: file.path).map { "  ⚠ \($0.reason)" } ?? ""
+                    print(pad(format(file.size(args.metric), args), 10) + "  " + file.path + warning)
                 }
             }
         case .types:
@@ -202,7 +203,7 @@ struct TreePrinter {
     let total: Int64
 
     func printTree(_ root: FileNode) {
-        print(line(for: root, label: root.path + cloudNote(root), prefix: ""))
+        print(line(for: root, label: root.path + cloudNote(root) + sensitiveNote(root), prefix: ""))
         printChildren(of: root, prefix: "", depth: 1)
     }
 
@@ -218,6 +219,7 @@ struct TreePrinter {
             var label = child.name + (child.isDirectory ? "/" : "")
             if child.isExcluded { label += "  (not scanned)" }
             label += cloudNote(child)
+            label += sensitiveNote(child)
             if child.errorCode != 0 { label += "  (\(String(cString: strerror(child.errorCode))))" }
             print(line(for: child, label: prefix + branch + label, prefix: prefix))
             if child.isDirectory {
@@ -228,6 +230,14 @@ struct TreePrinter {
             let rest = visible.suffix(hidden).reduce(Int64(0)) { $0 + $1.size(args.metric) }
             print(line(size: rest, label: prefix + "└── … \(hidden) more"))
         }
+    }
+
+    /// "  ⚠ reason" for important user data or system locations, so they aren't deleted by mistake.
+    /// Not repeated for items inside a folder that already carries the same note.
+    private func sensitiveNote(_ node: FileNode) -> String {
+        guard let warning = SensitivePaths.warning(for: node.path) else { return "" }
+        if let parent = node.parent, SensitivePaths.warning(for: parent.path)?.reason == warning.reason { return "" }
+        return "  ⚠ \(warning.reason)"
     }
 
     /// "  ☁︎" for a cloud-only item; "  (☁︎ 48 GB in cloud)" for a folder with cloud-only content.

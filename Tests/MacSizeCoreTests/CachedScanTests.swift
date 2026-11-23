@@ -74,6 +74,9 @@ private final class FailingStore: ScanSnapshotStore, @unchecked Sendable {
 
         try fixture.file("a/b/new.bin", bytes: 40_000)
         try FileManager.default.removeItem(at: fixture.root.appendingPathComponent("c/three.bin"))
+        // FSEvents records changes asynchronously; replaying history before it has caught up
+        // reports "nothing changed" (seen on slow CI runners).
+        _ = try settledEventID()
 
         let (root, outcome) = try CachedScan.run(path: fixture.root.path, options: ScanOptions(), cache: store)
 
@@ -196,6 +199,7 @@ private final class FailingStore: ScanSnapshotStore, @unchecked Sendable {
         #expect(first.saveError == nil)
 
         try fixture.file("a/later.bin", bytes: 3_000)
+        _ = try settledEventID()
         // Whatever the cache implementation, the outcome must agree with what it holds.
         let hadSnapshot = cache.load(rootPath: CachedScan.resolveRoot(path), optionsFingerprint: ScanOptions().fingerprint) != nil
         let (root, second) = try CachedScan.run(path: path, options: ScanOptions(), cache: cache)
