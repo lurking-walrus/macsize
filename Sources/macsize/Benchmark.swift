@@ -2,6 +2,7 @@ import Foundation
 import MacSizeCore
 
 /// Times the scanner against `du -sk` on the same path and compares totals.
+/// Always a raw full scan: the scan cache is never read or written here, whatever the flags.
 struct Benchmark {
     let args: Arguments
 
