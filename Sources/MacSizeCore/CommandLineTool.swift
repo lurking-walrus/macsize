@@ -142,14 +142,27 @@ public struct CommandLineToolManager: Sendable {
     }
 
     static func run(_ executable: String, arguments: [String], timeout: TimeInterval) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return nil }
+        // A just-written executable can briefly fail to launch with ETXTBSY ("text file busy")
+        // when another thread spawns a process that inherits a write descriptor to it.
+        // Retry a few times with a fresh Process; a Process can't be relaunched after a failure.
+        var launched: (Process, Pipe)?
+        for attempt in 0..<5 {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: executable)
+            process.arguments = arguments
+            process.standardInput = FileHandle.nullDevice
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            do {
+                try process.run()
+                launched = (process, pipe)
+                break
+            } catch {
+                if attempt < 4 { Thread.sleep(forTimeInterval: 0.05 * Double(attempt + 1)) }
+            }
+        }
+        guard let (process, output) = launched else { return nil }
 
         // Drain output concurrently so a chatty process can't block on a full pipe.
         let collected = OutputBuffer()
