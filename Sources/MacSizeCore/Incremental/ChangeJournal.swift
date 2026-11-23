@@ -30,8 +30,6 @@ public struct ChangeSet: Sendable, Equatable {
 }
 
 /// Reads the persistent FSEvents history.
-///
-/// FOUNDATION STUB for `changes(since:under:)`; the incremental agent implements it.
 public enum ChangeJournal {
     /// Current system-wide FSEvents event ID. Capture *before* starting a full scan.
     public static func currentEventID() -> UInt64 {
@@ -47,8 +45,62 @@ public enum ChangeJournal {
 
     /// Directories under `rootPath` changed since `eventID`. Blocks until history is replayed
     /// or `timeout` elapses (then reports a full rescan).
+    ///
+    /// Replays directory-level events through a temporary `FSEventStream` (`sinceWhen:
+    /// eventID`) until `kFSEventStreamEventFlagHistoryDone`. Reports `requiresFullRescan`
+    /// when `eventID` is 0 or in the future, the volume UUID differs from
+    /// `expectedVolumeUUID`, the stream can't be created, the timeout passes, or the
+    /// history says it can't be trusted (root changed, IDs wrapped, events dropped or
+    /// must-scan-subdirs at or above the root). Must-scan-subdirs/dropped events below the
+    /// root become `recursiveDirectories`. `latestEventID` is the newest event seen, or the
+    /// current ID taken just before the replay started if that is newer.
     public static func changes(since eventID: UInt64, under rootPath: String,
                                expectedVolumeUUID: String?, timeout: TimeInterval = 10) -> ChangeSet {
-        .fullRescan(latestEventID: currentEventID())
+        let startID = currentEventID()
+        guard eventID != 0, eventID <= startID else { return .fullRescan(latestEventID: startID) }
+
+        let root = DiskScanner.resolveRoot(rootPath)
+        if let expectedVolumeUUID, volumeUUID(forPath: root) != expectedVolumeUUID {
+            return .fullRescan(latestEventID: startID)
+        }
+
+        let collector = ReplayCollector(rootPath: root)
+        let stream = EventStream(label: "MacSize change journal") { events in
+            collector.add(events)
+        }
+        let flags = kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagWatchRoot
+        guard stream.start(path: root, since: eventID, latency: 0, flags: flags) else {
+            return .fullRescan(latestEventID: startID)
+        }
+        let finished = collector.done.wait(timeout: .now() + max(0, timeout)) == .success
+        stream.stop()
+        guard finished else { return .fullRescan(latestEventID: startID) }
+        return collector.changeSet(fallbackEventID: startID)
+    }
+}
+
+/// Thread-safe accumulator for a history replay; signals `done` on HistoryDone.
+private final class ReplayCollector: @unchecked Sendable {
+    let done = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var accumulator: ChangeAccumulator
+    private var signalled = false
+
+    init(rootPath: String) {
+        accumulator = ChangeAccumulator(rootPath: rootPath)
+    }
+
+    func add(_ events: [FSEvent]) {
+        lock.lock()
+        for event in events { accumulator.add(event) }
+        let finished = accumulator.historyDone && !signalled
+        if finished { signalled = true }
+        lock.unlock()
+        if finished { done.signal() }
+    }
+
+    func changeSet(fallbackEventID: UInt64) -> ChangeSet {
+        lock.lock(); defer { lock.unlock() }
+        return accumulator.makeChangeSet(fallbackEventID: fallbackEventID)
     }
 }
