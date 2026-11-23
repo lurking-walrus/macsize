@@ -127,6 +127,32 @@ each release waits for approval.
 
 ## Cutting a release
 
+### Automatic (recommended)
+
+Releases are driven by `CHANGELOG.md`. To ship a version, open a PR that adds a heading for it
+at the top of the changelog:
+
+```markdown
+## 0.2.0
+
+- What changed…
+```
+
+When that PR merges to `main`, the **Auto release** workflow (`.github/workflows/auto-release.yml`):
+
+1. reads the first `## X.Y.Z` heading in `CHANGELOG.md`,
+2. skips if `vX.Y.Z` already exists, and fails if the version isn't newer than the latest tag,
+3. tags the merged commit `vX.Y.Z` and starts the **Release** workflow on that tag.
+
+Merges that don't add a new version heading release nothing. You can collect notes under an
+`## Unreleased` heading at the top; it's ignored until you rename it to a version. A heading
+like `## 1.3.0-beta.1` produces a prerelease.
+
+The release job still runs on the tag, which is all the `release` environment (and its signing
+secrets) allows, so branch and PR runs never see those secrets.
+
+### Manual
+
 1. Make sure `main` is green and contains what you want to ship.
 2. Tag and push:
 
