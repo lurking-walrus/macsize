@@ -1,0 +1,44 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:treesize-mac}",
+      "name": "Debug macsize",
+      "target": "macsize",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug macsize"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:treesize-mac}",
+      "name": "Release macsize",
+      "target": "macsize",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release macsize"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:treesize-mac}",
+      "name": "Debug MacSizeApp",
+      "target": "MacSizeApp",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug MacSizeApp"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:treesize-mac}",
+      "name": "Release MacSizeApp",
+      "target": "MacSizeApp",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release MacSizeApp"
+    }
+  ]
+}

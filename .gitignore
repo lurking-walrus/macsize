@@ -65,3 +65,5 @@ fastlane/test_output
 build/
 .swiftpm/
 .DS_Store
+
+*.p8
