@@ -4,11 +4,17 @@ import MacSizeCore
 /// MacSize-style hierarchical table: name, size bar, % of parent, file count, date.
 struct OutlineTableView: View {
     @Environment(ScanModel.self) private var model
+    @AppStorage(CloudDisplay.showCloudOnlyKey) private var showCloudOnly = true
+    @State private var cloud = CloudActions.shared
     let root: FileNode
 
     var body: some View {
         @Bindable var model = model
-        Table(root.children, children: \.outlineChildren, selection: $model.selection) {
+        Table(
+            showCloudOnly ? root.children : root.children.filter { !$0.isCloudOnly },
+            children: \.[outlineChildren: showCloudOnly],
+            selection: $model.selection
+        ) {
             TableColumn("Name") { node in
                 HStack(spacing: 6) {
                     Image(systemName: icon(for: node))
@@ -17,6 +23,15 @@ struct OutlineTableView: View {
                     Text(node.name)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                    if node.isCloudOnly {
+                        Image(systemName: CloudDisplay.symbol)
+                            .foregroundStyle(.secondary)
+                    } else if node.isDirectory && node.cloudOnlyCount > 0 {
+                        Text("☁︎ \(SizeFormatter.string(node.cloudOnlySize))")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
                     if node.errorCode != 0 {
                         Image(systemName: "lock.fill")
                             .foregroundStyle(.secondary)
@@ -27,13 +42,17 @@ struct OutlineTableView: View {
                             .help("Not scanned (excluded or on another volume)")
                     }
                 }
+                .opacity(node.isCloudOnly ? CloudDisplay.dimmedOpacity : 1)
+                .help(CloudDisplay.folderSummary(node) ?? "")
             }
             .width(min: 160, ideal: 260)
 
             TableColumn("Size") { node in
                 Text(model.sizeText(node))
                     .monospacedDigit()
+                    .foregroundStyle(node.isCloudOnly ? .secondary : .primary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
+                    .help(node.isCloudOnly ? (CloudDisplay.folderSummary(node) ?? "") : "")
             }
             .width(min: 70, ideal: 80)
 
@@ -56,8 +75,29 @@ struct OutlineTableView: View {
             }
             .width(min: 70, ideal: 90)
         }
-        // Rebuild rows after sorting changes or items are trashed.
-        .id(model.revision)
+        // Rebuild rows after sorting changes, items are trashed or downloads removed,
+        // or cloud-only items are shown/hidden.
+        .id("\(model.revision)-\(cloud.revision)-\(showCloudOnly)")
+        .confirmationDialog(
+            removeDownloadTitle,
+            isPresented: Binding(get: { !cloud.pendingRemoval.isEmpty }, set: { if !$0 { cloud.pendingRemoval = [] } }),
+            titleVisibility: .visible
+        ) {
+            Button("Remove Download") { cloud.confirmRemoveDownload(metric: model.metric) }
+            Button("Cancel", role: .cancel) { cloud.pendingRemoval = [] }
+        } message: {
+            Text("The items stay in iCloud Drive and download again when you open them.\n\n"
+                + cloud.pendingRemoval.map(\.path).joined(separator: "\n"))
+        }
+        .alert(
+            "Couldn't Remove Download",
+            isPresented: Binding(get: { cloud.errorMessage != nil }, set: { if !$0 { cloud.errorMessage = nil } }),
+            presenting: cloud.errorMessage
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { message in
+            Text(message)
+        }
         .contextMenu(forSelectionType: FileNode.ID.self) { ids in
             NodeContextMenu(nodes: model.nodes(ids))
         } primaryAction: { ids in
@@ -72,6 +112,13 @@ struct OutlineTableView: View {
                 model.focus = target
             }
         }
+    }
+
+    private var removeDownloadTitle: String {
+        let items = cloud.pendingRemoval
+        let total = items.reduce(Int64(0)) { $0 + $1.allocatedSize }
+        let what = items.count == 1 ? "“\(items[0].name)”" : "\(items.count) items"
+        return "Remove the download of \(what) and free \(SizeFormatter.string(total))?"
     }
 
     private func icon(for node: FileNode) -> String {
@@ -118,9 +165,24 @@ struct NodeContextMenu: View {
             }
             Button("Reveal in Finder") { model.revealInFinder(nodes) }
             Button(nodes.count == 1 ? "Copy Path" : "Copy Paths") { model.copyPaths(nodes) }
+            // iCloud Drive only: other providers don't let third-party apps evict their items.
+            let removable = nodes.filter(CloudStorage.canRemoveDownload)
+            if !removable.isEmpty {
+                Button("Remove Download…") { CloudActions.shared.requestRemoveDownload(removable) }
+            }
             Divider()
             Button("Move to Trash…", role: .destructive) { model.requestTrash(nodes) }
                 .disabled(nodes.allSatisfy { $0.parent == nil })
         }
+    }
+}
+
+extension FileNode {
+    /// Outline children, optionally without cloud-only placeholders (for `Table(children:)`).
+    subscript(outlineChildren showCloudOnly: Bool) -> [FileNode]? {
+        guard let children = outlineChildren else { return nil }
+        if showCloudOnly { return children }
+        let local = children.filter { !$0.isCloudOnly }
+        return local.isEmpty ? nil : local
     }
 }

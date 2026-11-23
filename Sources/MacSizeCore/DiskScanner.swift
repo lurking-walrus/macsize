@@ -162,6 +162,7 @@ public final class DiskScanner: @unchecked Sendable {
 
     /// Scan on the calling thread (worker threads are spawned internally).
     public func scanSynchronously(path: String) throws -> FileNode {
+        CloudStorage.disableAutomaticDownloads()  // never trigger cloud downloads
         let rootPath = Self.resolveRoot(path)
 
         var info = stat()
@@ -172,16 +173,21 @@ public final class DiskScanner: @unchecked Sendable {
         let modTime = Double(info.st_mtimespec.tv_sec) + Double(info.st_mtimespec.tv_nsec) / 1_000_000_000
         guard (info.st_mode & S_IFMT) == S_IFDIR else {
             let kind: FileKind = (info.st_mode & S_IFMT) == S_IFLNK ? .symlink : .file
-            return FileNode(
+            let node = FileNode(
                 name: rootPath,
                 kind: kind,
                 allocatedSize: Int64(info.st_blocks) * 512,
                 logicalSize: Int64(info.st_size),
                 modificationTime: modTime
             )
+            if info.st_flags & CloudStorage.datalessFlag != 0 { node.markCloudOnly() }
+            return node
         }
 
         let root = FileNode(name: rootPath, kind: .directory, modificationTime: modTime)
+        if info.st_flags & CloudStorage.datalessFlag != 0 {  // cloud-only folder: don't list it
+            root.markCloudOnly(); root.finalize(); return root
+        }
         let context = ScanContext(
             rootDevice: info.st_dev,
             options: options,
@@ -346,6 +352,7 @@ final class ScanContext: @unchecked Sendable {
                     parent: directory
                 )
                 children.append(child)
+                if CloudStorage.markIfDataless(child, entry) { return }  // cloud-only: don't descend
                 let childPath = prefix + entry.name
                 if exclusions.contains(childPath) {
                     child.isExcluded = true
@@ -372,6 +379,7 @@ final class ScanContext: @unchecked Sendable {
                 parent: directory
             )
             child.errorCode = Int32(bitPattern: entry.error)
+            _ = CloudStorage.markIfDataless(child, entry)  // cloud-only file (allocated ≈ 0)
             children.append(child)
             files += 1
             bytes += allocated

@@ -67,6 +67,7 @@ struct ContentView: View {
             .help("Size on disk accounts for APFS compression, sparse files and clones")
             Menu {
                 Toggle("Stay on Selected Volume", isOn: $model.stayOnFileSystem)
+                CloudFilterToggle()
                 Divider()
                 Button("Open Full Disk Access Settings…") { model.openFullDiskAccessSettings() }
             } label: {
@@ -145,6 +146,7 @@ struct StatusBar: View {
             if let duration = model.scanDuration {
                 Text(String(format: "Scanned in %.1f s", duration))
             }
+            CloudSummaryView(root: root)
             Spacer()
             if model.unreadableCount > 0 {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)

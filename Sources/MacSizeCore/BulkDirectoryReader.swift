@@ -10,6 +10,8 @@ struct BulkEntry {
     var logicalSize: Int64 = 0
     var allocatedSize: Int64 = 0
     var error: UInt32 = 0
+    /// BSD file flags (`st_flags`), e.g. `SF_DATALESS` for cloud-only placeholders.
+    var flags: UInt32 = 0
 
     var isDirectory: Bool { objectType == VDIR.rawValue }
     var isSymlink: Bool { objectType == VLNK.rawValue }
@@ -27,6 +29,9 @@ final class BulkDirectoryReader {
     private var attributes: attrlist
 
     init(bufferSize: Int = 256 * 1024) {
+        // Every directory listing goes through a reader, so this guarantees no listing can
+        // ever make a File Provider download anything (see `CloudStorage`).
+        CloudStorage.disableAutomaticDownloads()
         capacity = bufferSize
         buffer = UnsafeMutableRawPointer.allocate(byteCount: bufferSize, alignment: 16)
 
@@ -37,6 +42,7 @@ final class BulkDirectoryReader {
             | attrgroup_t(ATTR_CMN_ERROR)
             | attrgroup_t(ATTR_CMN_OBJTYPE)
             | attrgroup_t(ATTR_CMN_MODTIME)
+            | attrgroup_t(ATTR_CMN_FLAGS)
             | attrgroup_t(ATTR_CMN_FILEID)
         list.fileattr = attrgroup_t(ATTR_FILE_LINKCOUNT)
             | attrgroup_t(ATTR_FILE_TOTALSIZE)
@@ -65,7 +71,10 @@ final class BulkDirectoryReader {
                 let common = returned.commonattr
                 let file = returned.fileattr
 
-                // Fields appear in a fixed order; absent ones take no space.
+                // Fields appear in a fixed order (ascending attribute bit, except that
+                // ATTR_CMN_ERROR comes first); absent ones take no space. Common order here:
+                // ERROR, NAME (0x1), OBJTYPE (0x8), MODTIME (0x400), FLAGS (0x40000),
+                // FILEID (0x02000000); then file attributes.
                 // ATTR_CMN_ERROR immediately follows the returned-attributes set.
                 if common & attrgroup_t(ATTR_CMN_ERROR) != 0 {
                     entry.error = field.loadUnaligned(as: UInt32.self)
@@ -85,6 +94,10 @@ final class BulkDirectoryReader {
                     let time = field.loadUnaligned(as: timespec.self)
                     entry.modificationTime = Double(time.tv_sec) + Double(time.tv_nsec) / 1_000_000_000
                     field += MemoryLayout<timespec>.size
+                }
+                if common & attrgroup_t(ATTR_CMN_FLAGS) != 0 {
+                    entry.flags = field.loadUnaligned(as: UInt32.self)
+                    field += MemoryLayout<UInt32>.size
                 }
                 if common & attrgroup_t(ATTR_CMN_FILEID) != 0 {
                     entry.fileID = field.loadUnaligned(as: UInt64.self)
