@@ -4,6 +4,15 @@ All notable changes to MacSize are documented here. Versions follow
 [Semantic Versioning](https://semver.org/), and each version is a
 [GitHub Release](https://github.com/lurking-walrus/treesize-mac/releases).
 
+## Unreleased
+
+- **Disk usage that matches System Settings**: the status bar shows how full the
+  scanned volume is ("648 GB used · 296 GB purgeable") and the start screen shows
+  space available. Purgeable space (local Time Machine snapshots, caches,
+  downloaded iCloud files macOS can evict) counts as available, as in System
+  Settings and Finder. Turn on **Count Purgeable Space as Used** (Options menu or
+  Settings → General) to see the APFS figure that Disk Utility and `df` report.
+
 ## 0.1.8
 
 - **About a third less memory**: each scanned item takes 96 bytes instead of 128,
