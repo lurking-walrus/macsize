@@ -79,9 +79,9 @@ extension FileNode {
     }
 }
 
-/// id → node lookup for a tree, built off the main thread.
-struct TreeIndex: @unchecked Sendable {
-    var nodes: [ObjectIdentifier: FileNode] = [:]
+/// One off-main-thread pass over a freshly installed tree: optional re-sort and the
+/// count of unreadable items. (Node lookup needs no table: `FileNode.ID` holds its node.)
+struct TreeIndex: Sendable {
     var unreadable = 0
 
     /// Walks the tree (read-only, unless `sortBy` is given). Callers must guarantee
@@ -90,12 +90,10 @@ struct TreeIndex: @unchecked Sendable {
         await Task.detached(priority: .userInitiated) {
             if let metric { root.sortChildren(by: metric) }
             var index = TreeIndex()
-            index.nodes.reserveCapacity(root.fileCount + root.directoryCount + 1)
             var stack = [root]
             while let node = stack.popLast() {
-                index.nodes[node.id] = node
                 if node.errorCode != 0 { index.unreadable += 1 }
-                stack.append(contentsOf: node.children)
+                if node.kind == .directory { stack.append(contentsOf: node.children) }
             }
             return index
         }.value

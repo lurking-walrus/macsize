@@ -107,7 +107,6 @@ final class ScanModel {
     @ObservationIgnored let cache = ScanCache()
     @ObservationIgnored private let cacheDirectory = RootPath.resolve(ScanCache.defaultDirectory.path)
 
-    @ObservationIgnored private var index: [ObjectIdentifier: FileNode] = [:]
     @ObservationIgnored private var scanTask: Task<Void, Never>?
     @ObservationIgnored private var scanner: DiskScanner?
 
@@ -319,7 +318,6 @@ final class ScanModel {
 
     private func install(_ root: FileNode, index: TreeIndex, keep: ViewPlace?) {
         self.root = root
-        self.index = index.nodes
         unreadableCount = index.unreadable
         focus = root
         selection = []
@@ -518,16 +516,15 @@ final class ScanModel {
         treeScannedAt = started
 
         if !result.isEmpty {
-            // Full rebuild of the id index, off the main actor (the job still holds the
+            // Re-sort if needed and recount unreadable items, off the main actor (the job still holds the
             // tree, so nothing mutates it meanwhile).
             let clock = ContinuousClock.now
             // A rebuilt root (`newRoot`) comes straight from the scanner, sorted by allocated size.
             let sort: SizeMetric? = result.newRoot != nil && metric != .allocated ? metric : nil
             let index = await TreeIndex.build(newRoot, sortBy: sort)
-            log.info("Rebuilt index of \(index.nodes.count) nodes in \(ContinuousClock.now - clock, privacy: .public)")
+            log.info("Re-indexed \(newRoot.fileCount + newRoot.directoryCount + 1) nodes in \(ContinuousClock.now - clock, privacy: .public)")
             guard gen == generation else { return }
             root = newRoot
-            self.index = index.nodes
             unreadableCount = index.unreadable
             restore(place, in: newRoot)
             needsSave = true
@@ -656,9 +653,15 @@ final class ScanModel {
 
     // MARK: - Lookup & navigation
 
-    func node(_ id: FileNode.ID) -> FileNode? { index[id] }
+    /// The node for `id` if it's still part of the displayed tree (IDs of nodes a refresh
+    /// replaced or that were trashed resolve to nil). IDs carry their node, so no
+    /// tree-sized lookup table is needed.
+    func node(_ id: FileNode.ID) -> FileNode? {
+        guard let root, id.node.isDescendant(of: root) else { return nil }
+        return id.node
+    }
 
-    func nodes(_ ids: Set<FileNode.ID>) -> [FileNode] { ids.compactMap { index[$0] } }
+    func nodes(_ ids: Set<FileNode.ID>) -> [FileNode] { ids.compactMap(node) }
 
     var selectedNodes: [FileNode] { nodes(selection) }
 
@@ -725,11 +728,6 @@ final class ScanModel {
             let focusPath = self.focus?.path
             for path in trashed {
                 guard let node = root.node(atPath: path), node !== root, !RootPath.exists(path) else { continue }
-                var stack = [node]
-                while let removed = stack.popLast() {
-                    self.index[removed.id] = nil
-                    stack.append(contentsOf: removed.children)
-                }
                 node.removeFromParent()
             }
             if let focusPath, let focus = self.focus, !focus.isDescendant(of: root) {

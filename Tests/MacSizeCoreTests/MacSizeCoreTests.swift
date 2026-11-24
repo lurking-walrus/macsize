@@ -351,3 +351,22 @@ final class Fixture {
         #expect(root.cloudOnlyCount == 1)
     }
 }
+
+@Suite struct FileNodeLayoutTests {
+    /// A whole-disk scan holds millions of nodes; keep each in a 96-byte malloc block.
+    @Test func instanceFitsIn96Bytes() {
+        #expect(class_getInstanceSize(FileNode.self) <= 96)
+    }
+
+    @Test func narrowStorageRoundTrips() {
+        let node = FileNode(name: "a", kind: .directory, modificationTime: 1_700_000_000.9)
+        #expect(node.modificationTime == 1_700_000_000)
+        node.fileCount = 3_000_000
+        node.directoryCount = 250_000
+        node.cloudOnlyCount = 12
+        #expect(node.fileCount == 3_000_000 && node.directoryCount == 250_000 && node.cloudOnlyCount == 12)
+        #expect(FileNode(name: "old", kind: .file, modificationTime: -5).modificationTime == 0)
+        #expect(node.id == node.id && node.id.node === node)
+        #expect(node.id != FileNode(name: "a", kind: .directory).id)
+    }
+}

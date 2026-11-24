@@ -16,7 +16,10 @@ public struct ScanOptions: Sendable {
     /// through firmlinks when scanning `/`).
     public var applySystemExclusions: Bool
 
-    public static let defaultThreadCount = max(2, min(ProcessInfo.processInfo.activeProcessorCount, 16))
+    /// Directory listing is kernel-bound (`getattrlistbulk` contends on filesystem locks), so
+    /// beyond ~8 threads wall time barely improves while CPU time keeps climbing: on an
+    /// 18-core Mac, 16 threads were ~10% faster than 8 but used ~65% more CPU.
+    public static let defaultThreadCount = max(2, min(ProcessInfo.processInfo.activeProcessorCount, 8))
 
     /// Generic macOS locations that inflate or duplicate results when scanning `/`.
     public static let systemExcludedPaths = [
@@ -269,7 +272,8 @@ final class WorkQueue: @unchecked Sendable {
         condition.lock()
         stack.append(contentsOf: items)
         pending += items.count
-        condition.broadcast()
+        // Wake only as many idle workers as there are new items.
+        if items.count == 1 { condition.signal() } else { condition.broadcast() }
         condition.unlock()
     }
 
