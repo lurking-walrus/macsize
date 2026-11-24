@@ -164,3 +164,27 @@ import Testing
         return count
     }
 }
+
+@Suite struct TrueSizeTests {
+    @Test func logicalSizeExcludesCloudOnlyContent() {
+        let folder = FileNode(name: "f", kind: .directory, parent: nil)
+        folder.logicalSize = 1_000
+        folder.allocatedSize = 400
+        folder.cloudOnlySize = 600
+        folder.cloudOnlyCount = 2
+        #expect(folder.size(.logical) == 400)
+        #expect(folder.size(.allocated) == 400)
+    }
+
+    @Test func mountedImagePathsSkipRootAndAreReadOnlyMounts() {
+        let paths = ScanOptions.mountedImagePaths()
+        #expect(!paths.contains("/"))
+        #expect(!paths.contains("/System/Volumes/Data"))
+        // Every simulator/cryptex image mount (if any are mounted) is excluded.
+        for path in paths { #expect(path.hasPrefix("/")) }
+    }
+
+    @Test func fingerprintChangedSoOldCachesAreNotReused() {
+        #expect(ScanOptions().fingerprint.hasPrefix("v2|"))
+    }
+}

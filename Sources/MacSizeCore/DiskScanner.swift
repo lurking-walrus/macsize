@@ -1,6 +1,9 @@
 import Darwin
 import Foundation
 
+/// `struct statfs`, under a name that doesn't collide with the `statfs()` function.
+private typealias MountInfo = statfs
+
 public struct ScanOptions: Sendable {
     /// Number of worker threads reading directories in parallel.
     public var threadCount: Int
@@ -23,6 +26,29 @@ public struct ScanOptions: Sendable {
         "/System/Volumes/Data",
     ]
 
+    /// Mount points of mounted disk images and cryptexes (read-only + `nobrowse`, e.g. the iOS
+    /// Simulator runtimes under `/private/var/run/com.apple.security.cryptexd`). Their contents
+    /// are already stored once, as the image file itself, so walking into them counts that
+    /// space twice (tens of GB). The root filesystem (`/`) is also read-only but is never skipped.
+    private static let mntNoBrowse: UInt32 = 0x0010_0000  // MNT_NOBROWSE (not exported to Swift)
+
+    public static func mountedImagePaths() -> [String] {
+        let count = getfsstat(nil, 0, MNT_NOWAIT)
+        guard count > 0 else { return [] }
+        var buffer = [MountInfo](repeating: MountInfo(), count: Int(count))
+        let size = Int32(MemoryLayout<MountInfo>.stride * Int(count))
+        let filled = getfsstat(&buffer, size, MNT_NOWAIT)
+        guard filled > 0 else { return [] }
+        return buffer.prefix(Int(filled)).compactMap { fs in
+            let flags = fs.f_flags
+            guard flags & UInt32(MNT_RDONLY) != 0, flags & UInt32(Self.mntNoBrowse) != 0 else { return nil }
+            let path = withUnsafePointer(to: fs.f_mntonname) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+            }
+            return path == "/" ? nil : path
+        }
+    }
+
     public init(
         threadCount: Int = ScanOptions.defaultThreadCount,
         stayOnFileSystem: Bool = false,
@@ -39,12 +65,12 @@ public struct ScanOptions: Sendable {
     /// only reused when the fingerprint matches.
     public var fingerprint: String {
         let exclusions = effectiveExclusions.sorted().joined(separator: "\u{1F}")
-        return "v1|fs=\(stayOnFileSystem ? 1 : 0)|sys=\(applySystemExclusions ? 1 : 0)|ex=\(exclusions)"
+        return "v2|fs=\(stayOnFileSystem ? 1 : 0)|sys=\(applySystemExclusions ? 1 : 0)|ex=\(exclusions)"
     }
 
     var effectiveExclusions: Set<String> {
         var paths = excludedPaths
-        if applySystemExclusions { paths += Self.systemExcludedPaths }
+        if applySystemExclusions { paths += Self.systemExcludedPaths + Self.mountedImagePaths() }
         var result = Set<String>()
         for path in paths {
             let normalized = Self.normalize(path)
