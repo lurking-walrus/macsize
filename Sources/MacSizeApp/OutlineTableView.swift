@@ -12,9 +12,7 @@ struct OutlineTableView: View {
 
     var body: some View {
         @Bindable var model = model
-        Table(
-            showCloudOnly ? root.children : root.children.filter { !$0.isCloudOnly },
-            children: \.[outlineChildren: showCloudOnly],
+        Table(of: FileNode.self,
             selection: $model.selection,
             columnCustomization: $columns
         ) {
@@ -82,6 +80,9 @@ struct OutlineTableView: View {
             }
             .width(min: 70, ideal: 90)
             .customizationID("modified")
+        } rows: {
+            OutlineRows(nodes: showCloudOnly ? root.children : root.children.filter { !$0.isCloudOnly },
+                        showCloudOnly: showCloudOnly)
         }
         // Rebuild rows after sorting changes, items are trashed or downloads removed,
         // or cloud-only items are shown/hidden.
@@ -192,5 +193,35 @@ extension FileNode {
         if showCloudOnly { return children }
         let local = children.filter { !$0.isCloudOnly }
         return local.isEmpty ? nil : local
+    }
+}
+
+/// Rows for a list of sibling nodes. Folders are disclosure rows whose expansion lives in
+/// `ScanModel.expandedPaths`, so it survives the table being rebuilt after a refresh.
+struct OutlineRows: TableRowContent {
+    @Environment(ScanModel.self) private var model
+    let nodes: [FileNode]
+    let showCloudOnly: Bool
+
+    var tableRowBody: some TableRowContent<FileNode> {
+        ForEach(nodes) { node in
+            if let children = node[outlineChildren: showCloudOnly] {
+                DisclosureTableRow(node, isExpanded: expansion(of: node)) {
+                    OutlineRows(nodes: children, showCloudOnly: showCloudOnly)
+                }
+            } else {
+                TableRow(node)
+            }
+        }
+    }
+
+    private func expansion(of node: FileNode) -> Binding<Bool> {
+        let path = node.path
+        return Binding(
+            get: { model.expandedPaths.contains(path) },
+            set: { expanded in
+                if expanded { model.expandedPaths.insert(path) } else { model.expandedPaths.remove(path) }
+            }
+        )
     }
 }

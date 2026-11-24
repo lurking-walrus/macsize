@@ -4,6 +4,11 @@ All notable changes to MacSize are documented here. Versions follow
 [Semantic Versioning](https://semver.org/), and each version is a
 [GitHub Release](https://github.com/lurking-walrus/treesize-mac/releases).
 
+## 0.1.6
+
+- **Expanded folders stay expanded**: live updates, Rescan and changing the size
+  metric no longer collapse the folders you opened in the file list.
+
 ## 0.1.5
 
 - **Extra warning for sensitive items**: moving important user data or system
