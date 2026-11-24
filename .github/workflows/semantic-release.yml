@@ -1,0 +1,62 @@
+# Cuts a release automatically from Conventional Commits merged to main.
+#
+# semantic-release reads the commits since the last vX.Y.Z tag:
+#   fix: / perf: / revert:   -> patch      feat: -> minor
+#   "!" after the type, or a "BREAKING CHANGE:" footer -> major
+#   anything else (docs:, ci:, chore:, refactor:, test:, ...) -> no release
+# When a release is due it tags the merged commit, creates a *draft* GitHub release with
+# generated notes, and starts release.yml on the tag. release.yml builds, signs and
+# notarizes, uploads the assets and publishes the draft. A failed build leaves the draft
+# unpublished, so the app and CLI are never offered a release without assets.
+#
+# Tags pushed with GITHUB_TOKEN don't trigger other workflows, so release.yml is started
+# explicitly with `gh workflow run --ref <tag>`; it still runs on the tag, which is what
+# the "release" environment (and its signing secrets) is restricted to.
+name: Semantic release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write       # push the tag, create the draft release
+  issues: write         # comment on released issues, open an issue if releasing fails
+  pull-requests: write  # comment on released pull requests
+  actions: write        # dispatch release.yml
+
+concurrency:
+  group: semantic-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install semantic-release
+        run: npm ci --no-audit --no-fund
+
+      - name: Run semantic-release
+        id: semrel
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npx semantic-release
+
+      - name: Start the release workflow on the tag
+        if: steps.semrel.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.semrel.outputs.tag }}
+        run: |
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+          echo "Dispatched release.yml for $TAG: https://github.com/$GITHUB_REPOSITORY/actions/workflows/release.yml"

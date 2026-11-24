@@ -327,6 +327,6 @@ JSON export and treemap geometry.
 
 ## License
 
-See [CHANGELOG.md](CHANGELOG.md) for release notes.
+Release notes are on [GitHub Releases](https://github.com/lurking-walrus/treesize-mac/releases) (earlier history in [CHANGELOG.md](CHANGELOG.md)); see [docs/RELEASING.md](docs/RELEASING.md) for how releases are cut.
 
 MIT. See [LICENSE](LICENSE).

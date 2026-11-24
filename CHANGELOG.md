@@ -4,6 +4,10 @@ All notable changes to MacSize are documented here. Versions follow
 [Semantic Versioning](https://semver.org/), and each version is a
 [GitHub Release](https://github.com/lurking-walrus/treesize-mac/releases).
 
+**From 0.1.10 on, release notes are generated from commit messages and published on each
+[GitHub Release](https://github.com/lurking-walrus/treesize-mac/releases)**; this file keeps
+the earlier history. See [docs/RELEASING.md](docs/RELEASING.md).
+
 ## 0.1.9
 
 - **Disk usage that matches System Settings**: the status bar shows how full the

@@ -1,0 +1,17 @@
+{
+  "name": "macsize-release",
+  "private": true,
+  "description": "Release tooling only (semantic-release). MacSize itself is a Swift package.",
+  "scripts": {
+    "release": "semantic-release",
+    "release:dry-run": "semantic-release --dry-run --no-ci"
+  },
+  "devDependencies": {
+    "@semantic-release/exec": "7.1.0",
+    "conventional-changelog-conventionalcommits": "9.3.1",
+    "semantic-release": "25.0.9"
+  },
+  "engines": {
+    "node": ">=24.10.0"
+  }
+}

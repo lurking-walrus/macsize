@@ -67,3 +67,5 @@ build/
 .DS_Store
 
 *.p8
+# Node (release tooling)
+node_modules/
