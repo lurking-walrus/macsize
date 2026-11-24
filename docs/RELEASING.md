@@ -158,6 +158,21 @@ If the Release workflow fails, the draft stays unpublished, so the app and CLI a
 offered a release without assets. Fix the problem and re-run the failed workflow (or run
 **Release** on the tag from the Actions tab); it publishes the existing draft.
 
+#### Auto-merge
+
+Every ready (non-draft) PR from a branch in this repository merges itself, squashed, once the
+required checks pass: **build-and-test** and **conventional-title** (the PR title check).
+`.github/workflows/auto-merge.yml` turns GitHub's auto-merge on when the PR is opened or
+marked ready. To keep a PR open, add the **no-automerge** label (removing it turns
+auto-merge back on), or open it as a draft. PRs from forks are never auto-merged.
+
+A merge made by auto-merge counts as an action of whoever enabled it. With the default
+`GITHUB_TOKEN`, GitHub doesn't start workflows for that push, so **Semantic release** doesn't
+run right away; its hourly schedule (minute 17) releases the merge instead. For immediate
+releases, add a repository secret `AUTO_MERGE_TOKEN`: a
+[fine-grained personal access token](https://github.com/settings/personal-access-tokens/new)
+limited to this repository with **Contents** and **Pull requests** set to read and write.
+
 Release notes live on the GitHub release. `CHANGELOG.md` keeps the history up to 0.1.9.
 
 Preview what would be released from a checkout (needs Node 24):

@@ -1,0 +1,46 @@
+# Turns on GitHub auto-merge (squash) for every ready pull request from this repository,
+# so it merges itself as soon as the required checks (build-and-test, conventional-title)
+# pass. Label a PR "no-automerge" to opt out; draft PRs are skipped until marked ready.
+# Fork PRs are never auto-merged (the ruleset requires no approvals).
+#
+# Token: a merge done by auto-merge counts as an action of whoever enabled it. If that is
+# GITHUB_TOKEN, the push to main triggers no workflows, so semantic-release would not run
+# on it (its hourly schedule picks the merge up later). Set the AUTO_MERGE_TOKEN secret to
+# a fine-grained token (this repo; Contents and Pull requests: read and write) so merges
+# release immediately. See docs/RELEASING.md.
+name: Auto-merge
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  enable:
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enable or disable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+          HAS_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN != '' }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          OPT_OUT: ${{ contains(github.event.pull_request.labels.*.name, 'no-automerge') }}
+        run: |
+          if [[ "$OPT_OUT" == true ]]; then
+            echo "Labeled no-automerge; making sure auto-merge is off."
+            gh pr merge --disable-auto "$PR_URL" || true
+            exit 0
+          fi
+          if [[ "$HAS_TOKEN" != true ]]; then
+            echo "::warning::AUTO_MERGE_TOKEN is not set: this PR's merge won't trigger semantic-release; its hourly run will release it instead."
+          fi
+          gh pr merge --auto --squash "$PR_URL"

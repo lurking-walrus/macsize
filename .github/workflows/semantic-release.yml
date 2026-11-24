@@ -17,6 +17,10 @@ name: Semantic release
 on:
   push:
     branches: [main]
+  # Fallback for merges that trigger no push workflows (auto-merge enabled with
+  # GITHUB_TOKEN, see auto-merge.yml). Releases nothing when there's nothing new.
+  schedule:
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
