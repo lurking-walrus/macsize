@@ -4,7 +4,7 @@ All notable changes to MacSize are documented here. Versions follow
 [Semantic Versioning](https://semver.org/), and each version is a
 [GitHub Release](https://github.com/lurking-walrus/treesize-mac/releases).
 
-## Unreleased
+## 0.1.9
 
 - **Disk usage that matches System Settings**: the status bar shows how full the
   scanned volume is ("648 GB used · 296 GB purgeable") and the start screen shows
