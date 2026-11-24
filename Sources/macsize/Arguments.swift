@@ -70,7 +70,7 @@ struct Arguments {
       -n, --top N|all         Max entries per directory (scan) (default 20)
       -c, --count N           Number of entries for `largest`/`types` (default 25)
       -m, --min-size SIZE     Hide entries smaller than SIZE, e.g. 100M, 1.5G, 512KiB
-          --logical           Rank by logical size instead of size on disk (includes cloud-only files)
+          --logical           Rank by logical size instead of size on disk (files stored on this Mac; cloud-only count 0)
           --binary            Use 1024-based units (KiB, MiB, ...)
           --json              Emit JSON instead of text
           --no-bars           Don't draw percentage bars

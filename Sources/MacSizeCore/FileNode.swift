@@ -13,7 +13,8 @@ public enum SizeMetric: String, Sendable, CaseIterable, Codable {
     /// Bytes actually allocated on disk. Accounts for APFS sparse files,
     /// compression and (per-file) clones. This is what `du` reports.
     case allocated
-    /// The logical length of the file contents (what Finder calls "size").
+    /// The logical length of the file contents (what Finder calls "size"), counting only
+    /// what is stored on this Mac: cloud-only placeholders contribute 0.
     case logical
 
     public var displayName: String {
@@ -106,7 +107,7 @@ public final class FileNode: Identifiable, @unchecked Sendable {
     public func size(_ metric: SizeMetric) -> Int64 {
         switch metric {
         case .allocated: return allocatedSize
-        case .logical: return logicalSize
+        case .logical: return localLogicalSize
         }
     }
 

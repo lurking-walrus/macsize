@@ -4,6 +4,15 @@ All notable changes to MacSize are documented here. Versions follow
 [Semantic Versioning](https://semver.org/), and each version is a
 [GitHub Release](https://github.com/lurking-walrus/treesize-mac/releases).
 
+## 0.1.7
+
+- **Truer totals**: Logical Size no longer counts cloud-only files, so it shows what
+  is actually stored on this Mac (cloud-only items are still listed with ☁︎).
+- **No double counting of mounted disk images**: scanning `/` now skips read-only
+  mounts of disk images and cryptexes (such as the iOS Simulator runtimes under
+  `/private/var/run/com.apple.security.cryptexd`), which duplicated tens of GB that
+  is already counted as the image files. Existing cached scans are rebuilt once.
+
 ## 0.1.6
 
 - **Expanded folders stay expanded**: live updates, Rescan and changing the size
