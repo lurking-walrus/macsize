@@ -47,6 +47,9 @@ final class ScanModel {
     /// Directory shown in the treemap.
     var focus: FileNode?
     var selection = Set<FileNode.ID>()
+    /// Folders expanded in the file list, by path. Kept here (not in the table) because
+    /// refreshes replace nodes and rebuild the table; paths survive that.
+    var expandedPaths = Set<String>()
     /// Bumped whenever the tree mutates so views that cache layout can refresh.
     private(set) var revision = 0
     var pendingTrash: [FileNode] = [] {
@@ -205,6 +208,7 @@ final class ScanModel {
         let useCache = useCache && rememberScans
         // Same root again: try to keep the user's place.
         let keep = root?.path == resolvedPath ? viewPlace() : nil
+        if keep == nil { expandedPaths = [] }
         let cache = self.cache
         let metric = self.metric
         let gen = generation
