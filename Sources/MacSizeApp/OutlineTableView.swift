@@ -9,6 +9,8 @@ struct OutlineTableView: View {
     /// Column widths/order the user set; persisted so rescans (which rebuild the table) keep them.
     @SceneStorage("outlineColumns") private var columns = TableColumnCustomization<FileNode>()
     let root: FileNode
+    /// Deepest level of saved expansion currently applied to the table; see `revealExpandedFolders()`.
+    @State private var revealDepth = 1
 
     var body: some View {
         @Bindable var model = model
@@ -82,11 +84,13 @@ struct OutlineTableView: View {
             .customizationID("modified")
         } rows: {
             OutlineRows(nodes: showCloudOnly ? root.children : root.children.filter { !$0.isCloudOnly },
-                        showCloudOnly: showCloudOnly)
+                        showCloudOnly: showCloudOnly, depth: 1, revealDepth: revealDepth,
+                        revision: OutlineRevision(tree: model.revision, cloud: cloud.revision))
         }
-        // Rebuild rows after sorting changes, items are trashed or downloads removed,
-        // or cloud-only items are shown/hidden.
-        .id("\(model.revision)-\(cloud.revision)-\(showCloudOnly)")
+        // No `.id(model.revision)` here: rebuilding the table on every refresh collapsed
+        // nested folders (see `revealExpandedFolders()`). Rows are diffed by node identity
+        // instead, and `revision` makes them re-read the mutated tree.
+        .task { await revealExpandedFolders() }
         .confirmationDialog(
             removeDownloadTitle,
             isPresented: Binding(get: { !cloud.pendingRemoval.isEmpty }, set: { if !$0 { cloud.pendingRemoval = [] } }),
@@ -121,6 +125,25 @@ struct OutlineTableView: View {
                 model.focus = target
             }
         }
+    }
+
+    /// Re-expand saved folders one level at a time when the table is created (first
+    /// show, after a rescan, reopening a cached scan). A new `NSOutlineView` drops a
+    /// nested row's expansion request if it arrives while its parent row is still
+    /// expanding, so asking for every level at once only opens the top level.
+    private func revealExpandedFolders() async {
+        let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        let deepest = model.expandedPaths.lazy
+            .filter { $0.hasPrefix(prefix) }
+            .map { $0.dropFirst(prefix.count).split(separator: "/").count }
+            .max() ?? 0
+        while revealDepth < deepest {
+            // One frame per level, so the outline view has inserted the rows below.
+            try? await Task.sleep(for: .milliseconds(16))
+            guard !Task.isCancelled else { return }
+            revealDepth += 1
+        }
+        revealDepth = .max
     }
 
     private var removeDownloadTitle: String {
@@ -196,18 +219,32 @@ extension FileNode {
     }
 }
 
+/// Changes whenever the displayed tree or its cloud state is mutated in place, so rows
+/// re-read their (non-observable) nodes.
+struct OutlineRevision: Equatable {
+    var tree: Int
+    var cloud: Int
+}
+
 /// Rows for a list of sibling nodes. Folders are disclosure rows whose expansion lives in
-/// `ScanModel.expandedPaths`, so it survives the table being rebuilt after a refresh.
+/// `ScanModel.expandedPaths` (by path), so it survives refreshes replacing nodes and the
+/// table being recreated after a rescan.
 struct OutlineRows: TableRowContent {
     @Environment(ScanModel.self) private var model
     let nodes: [FileNode]
     let showCloudOnly: Bool
+    /// Level of these rows below the table's root (its children are 1).
+    let depth: Int
+    /// Saved expansion deeper than this isn't applied yet.
+    let revealDepth: Int
+    let revision: OutlineRevision
 
     var tableRowBody: some TableRowContent<FileNode> {
         ForEach(nodes) { node in
             if let children = node[outlineChildren: showCloudOnly] {
                 DisclosureTableRow(node, isExpanded: expansion(of: node)) {
-                    OutlineRows(nodes: children, showCloudOnly: showCloudOnly)
+                    OutlineRows(nodes: children, showCloudOnly: showCloudOnly, depth: depth + 1,
+                                revealDepth: revealDepth, revision: revision)
                 }
             } else {
                 TableRow(node)
@@ -218,7 +255,7 @@ struct OutlineRows: TableRowContent {
     private func expansion(of node: FileNode) -> Binding<Bool> {
         let path = node.path
         return Binding(
-            get: { model.expandedPaths.contains(path) },
+            get: { model.expandedPaths.contains(path) && depth <= revealDepth },
             set: { expanded in
                 if expanded { model.expandedPaths.insert(path) } else { model.expandedPaths.remove(path) }
             }
