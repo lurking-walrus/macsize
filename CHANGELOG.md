@@ -4,6 +4,15 @@ All notable changes to MacSize are documented here. Versions follow
 [Semantic Versioning](https://semver.org/), and each version is a
 [GitHub Release](https://github.com/lurking-walrus/treesize-mac/releases).
 
+## 0.1.8
+
+- **About a third less memory**: each scanned item takes 96 bytes instead of 128,
+  and the per-item lookup table the app kept alongside the tree is gone. A scan of
+  ~1 million files now needs about 194 MB instead of 291 MB, and live updates no
+  longer briefly hold two copies of that table.
+- **Lower CPU while scanning**: scans use at most 8 worker threads. More threads
+  weren't faster (folder listing is limited by the kernel) but used ~65% more CPU.
+
 ## 0.1.7
 
 - **Truer totals**: Logical Size no longer counts cloud-only files, so it shows what

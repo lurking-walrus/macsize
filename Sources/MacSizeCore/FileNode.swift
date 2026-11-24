@@ -31,24 +31,31 @@ public enum SizeMetric: String, Sendable, CaseIterable, Codable {
 /// immutable once a scan finishes, except through the explicit mutation
 /// helpers below (e.g. after moving an item to the Trash).
 public final class FileNode: Identifiable, @unchecked Sendable {
+    // Storage is laid out for size: a scan holds one instance per file, so every byte
+    // counts (millions of nodes for a whole disk). Swift lays out stored properties in
+    // declaration order, so the 8-byte fields come first and the small ones are packed
+    // at the end; the instance is 95 bytes, i.e. a 96-byte malloc block (was 128).
+    // Counts and the modification time are stored narrow behind wide public accessors.
+
     /// For the root node this is the full path; for every other node it is the
     /// last path component.
     public let name: String
-    public let kind: FileKind
-
     public internal(set) var allocatedSize: Int64
     public internal(set) var logicalSize: Int64
-    /// Number of non-directory items in this subtree (1 for a file).
-    public internal(set) var fileCount: Int
-    /// Number of directories below this node (not counting itself).
-    public internal(set) var directoryCount: Int
-    /// Most recent modification time in the subtree, seconds since 1970.
-    public internal(set) var modificationTime: TimeInterval
     /// Children, sorted largest-first after a scan completes.
     public internal(set) var children: [FileNode]
     public internal(set) weak var parent: FileNode?
+    /// Logical bytes in this subtree that live only in cloud storage (not downloaded).
+    /// For a cloud-only file this is its logical size; directories aggregate it.
+    public internal(set) var cloudOnlySize: Int64 = 0
+    private var storedFileCount: Int32
+    private var storedDirectoryCount: Int32 = 0
+    /// Whole seconds since 1970 (the cache stores whole seconds too).
+    private var storedModificationTime: UInt32
+    private var storedCloudOnlyCount: Int32 = 0
     /// `errno` encountered while reading this item (0 if none).
     public internal(set) var errorCode: Int32 = 0
+    public let kind: FileKind
     /// True if this directory was intentionally not descended into
     /// (excluded path or a different volume).
     public internal(set) var isExcluded = false
@@ -56,13 +63,44 @@ public final class FileNode: Identifiable, @unchecked Sendable {
     /// (iCloud Drive, Google Drive, OneDrive, Dropbox… via File Provider, flag `SF_DATALESS`).
     /// A dataless directory hasn't been enumerated locally, so its children are unknown.
     public internal(set) var isCloudOnly = false
-    /// Logical bytes in this subtree that live only in cloud storage (not downloaded).
-    /// For a cloud-only file this is its logical size; directories aggregate it.
-    public internal(set) var cloudOnlySize: Int64 = 0
-    /// Number of cloud-only items in this subtree (1 for a cloud-only file or directory).
-    public internal(set) var cloudOnlyCount: Int = 0
 
-    public var id: ObjectIdentifier { ObjectIdentifier(self) }
+    /// Number of non-directory items in this subtree (1 for a file).
+    public internal(set) var fileCount: Int {
+        get { Int(storedFileCount) }
+        set { storedFileCount = Int32(clamping: newValue) }
+    }
+    /// Number of directories below this node (not counting itself).
+    public internal(set) var directoryCount: Int {
+        get { Int(storedDirectoryCount) }
+        set { storedDirectoryCount = Int32(clamping: newValue) }
+    }
+    /// Number of cloud-only items in this subtree (1 for a cloud-only file or directory).
+    public internal(set) var cloudOnlyCount: Int {
+        get { Int(storedCloudOnlyCount) }
+        set { storedCloudOnlyCount = Int32(clamping: newValue) }
+    }
+    /// Most recent modification time in the subtree, seconds since 1970, rounded down to
+    /// whole seconds (times before 1970 read as 1970).
+    public internal(set) var modificationTime: TimeInterval {
+        get { TimeInterval(storedModificationTime) }
+        set { storedModificationTime = Self.wholeSeconds(newValue) }
+    }
+
+    private static func wholeSeconds(_ time: TimeInterval) -> UInt32 {
+        guard time.isFinite, time > 0 else { return 0 }
+        return time >= TimeInterval(UInt32.max) ? .max : UInt32(time.rounded(.down))
+    }
+
+    /// Identity of this node, usable as a SwiftUI/selection ID. It holds the node itself,
+    /// so an ID always resolves back to its node without a separate lookup table.
+    public var id: ID { ID(self) }
+
+    public struct ID: Hashable, @unchecked Sendable {
+        public let node: FileNode
+        init(_ node: FileNode) { self.node = node }
+        public static func == (lhs: ID, rhs: ID) -> Bool { lhs.node === rhs.node }
+        public func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(node)) }
+    }
 
     init(
         name: String,
@@ -76,9 +114,8 @@ public final class FileNode: Identifiable, @unchecked Sendable {
         self.kind = kind
         self.allocatedSize = allocatedSize
         self.logicalSize = logicalSize
-        self.fileCount = kind == .directory ? 0 : 1
-        self.directoryCount = 0
-        self.modificationTime = modificationTime
+        self.storedFileCount = kind == .directory ? 0 : 1
+        self.storedModificationTime = Self.wholeSeconds(modificationTime)
         self.children = []
         self.parent = parent
     }

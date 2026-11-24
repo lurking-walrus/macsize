@@ -101,7 +101,7 @@ struct TreemapView: View {
     /// so hover-driven redraws stay cheap.
     private func layoutItems(size: CGSize) -> [TreemapItem] {
         let key = TreemapLayoutCache.Key(
-            focus: focus.id, size: size, revision: model.revision, metric: model.metric,
+            focus: ObjectIdentifier(focus), size: size, revision: model.revision, metric: model.metric,
             showCloudOnly: showCloudOnly, cloudRevision: cloud.revision
         )
         if cache.key == key { return cache.items }
