@@ -1,7 +1,8 @@
 # Releasing MacSize
 
-Releases are built by GitHub Actions (`.github/workflows/release.yml`) when a `v*` tag is
-pushed. Each release is:
+Releases are versioned automatically by semantic-release from Conventional Commit PR titles
+(see [Cutting a release](#cutting-a-release)) and built by GitHub Actions
+(`.github/workflows/release.yml`) on the resulting `v*` tag. Each release is:
 
 - a universal (arm64 + x86_64) `MacSize.app`, Developer ID-signed with the hardened runtime
   and a secure timestamp, notarized and stapled, shipped as a `.zip` (Sparkle's update
@@ -129,24 +130,45 @@ each release waits for approval.
 
 ### Automatic (recommended)
 
-Releases are driven by `CHANGELOG.md`. To ship a version, open a PR that adds a heading for it
-at the top of the changelog:
+Releases are cut by [semantic-release](https://semantic-release.gitbook.io/) from
+[Conventional Commits](https://www.conventionalcommits.org/). PRs are squash-merged, so the
+**PR title** becomes the commit subject on `main`; the **PR title** check
+(`.github/workflows/pr-title.yml`) makes sure it's conventional.
 
-```markdown
-## 0.2.0
+| PR title | Release |
+| --- | --- |
+| `fix: …`, `perf: …`, `revert: …` | patch (`0.1.9` → `0.1.10`) |
+| `feat: …` | minor (`0.1.9` → `0.2.0`) |
+| `feat!: …`, or a `BREAKING CHANGE:` footer | major (`0.1.9` → `1.0.0`) |
+| `docs:`, `ci:`, `build:`, `chore:`, `refactor:`, `style:`, `test:` | none |
 
-- What changed…
+A scope is optional: `fix(cli): …`, `feat(app): …`.
+
+On every push to `main`, the **Semantic release** workflow (`.github/workflows/semantic-release.yml`):
+
+1. finds the commits since the latest `vX.Y.Z` tag and works out the next version (or stops if
+   none of them warrants a release),
+2. tags the merged commit `vX.Y.Z` and creates a **draft** GitHub release named
+   "MacSize X.Y.Z" with notes generated from those commits, comments on the released
+   PRs and issues, and
+3. starts the **Release** workflow on that tag, which builds, signs and notarizes, uploads the
+   assets to the draft and publishes it.
+
+If the Release workflow fails, the draft stays unpublished, so the app and CLI are never
+offered a release without assets. Fix the problem and re-run the failed workflow (or run
+**Release** on the tag from the Actions tab); it publishes the existing draft.
+
+Release notes live on the GitHub release. `CHANGELOG.md` keeps the history up to 0.1.9.
+
+Preview what would be released from a checkout (needs Node 24):
+
+```sh
+npm ci
+GITHUB_TOKEN="$(gh auth token)" npx semantic-release --dry-run --no-ci
 ```
 
-When that PR merges to `main`, the **Auto release** workflow (`.github/workflows/auto-release.yml`):
-
-1. reads the first `## X.Y.Z` heading in `CHANGELOG.md`,
-2. skips if `vX.Y.Z` already exists, and fails if the version isn't newer than the latest tag,
-3. tags the merged commit `vX.Y.Z` and starts the **Release** workflow on that tag.
-
-Merges that don't add a new version heading release nothing. You can collect notes under an
-`## Unreleased` heading at the top; it's ignored until you rename it to a version. A heading
-like `## 1.3.0-beta.1` produces a prerelease.
+Run it on `main`; on other branches semantic-release only reports that the branch isn't
+configured to release.
 
 The release job still runs on the tag, which is all the `release` environment (and its signing
 secrets) allows, so branch and PR runs never see those secrets.

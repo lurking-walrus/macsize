@@ -1,0 +1,30 @@
+# PRs are squash-merged with the PR title as the commit subject, and semantic-release
+# decides the next version from those subjects. Require Conventional Commits titles.
+name: PR title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  conventional-title:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check the title follows Conventional Commits
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._/-]+\))?!?: [^ ].*'
+          if [[ "$TITLE" =~ $pattern ]]; then
+            echo "OK: $TITLE"
+            exit 0
+          fi
+          echo "::error::PR title must follow Conventional Commits, e.g. 'fix: keep folders expanded' or 'feat(cli): add --json'."
+          echo "  Got: $TITLE"
+          echo "  Types: feat (minor), fix/perf/revert (patch), build/chore/ci/docs/refactor/style/test (no release)."
+          echo "  Add '!' after the type (feat!: ...) for a breaking change (major)."
+          exit 1
