@@ -81,6 +81,7 @@ struct ContentView: View {
             Menu {
                 Toggle("Stay on Selected Volume", isOn: $model.stayOnFileSystem)
                 CloudFilterToggle()
+                PurgeableToggle()
                 Divider()
                 Button("Open Full Disk Access Settings…") { model.openFullDiskAccessSettings() }
             } label: {
@@ -188,6 +189,7 @@ struct StatusBar: View {
             FreshnessStatus()
             CloudSummaryView(root: root)
             Spacer()
+            VolumeUsageSummary(url: root.url)
             if model.unreadableCount > 0 {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
                 Text("\(SizeFormatter.grouped(model.unreadableCount)) items couldn't be read")
@@ -266,20 +268,12 @@ private struct LocationButton: View {
             HStack {
                 Label(title, systemImage: systemImage)
                 Spacer()
-                if let free = Self.freeSpace(url) {
-                    Text("\(free) free").foregroundStyle(.secondary)
-                }
+                VolumeFreeText(url: url).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
         }
         .controlSize(.large)
         .frame(width: 320)
-    }
-
-    static func freeSpace(_ url: URL) -> String? {
-        guard let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
-              let bytes = values.volumeAvailableCapacityForImportantUsage else { return nil }
-        return SizeFormatter.string(bytes)
     }
 }
 

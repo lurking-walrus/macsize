@@ -14,6 +14,14 @@ struct GeneralSettingsView: View {
             Section {
                 Toggle("Update results automatically when files change", isOn: $model.liveUpdates)
             }
+            Section("Disk Space") {
+                PurgeableToggle()
+                Text("Off matches System Settings and Finder. On matches Disk Utility and df. "
+                     + VolumeDisplay.explanation)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Section("Cache") {
                 Toggle("Remember scans between launches", isOn: $model.rememberScans)
                 Text("Reopening a folder shows the saved results instantly, then updates only what changed.")
